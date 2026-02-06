@@ -62,6 +62,12 @@ For example: OS version, programs, libraries, etc.
    uv sync
    ```
 
+1. **Resources**:
+   - https://www.slicer.org/
+   - https://zenodo.org/records/11199559
+   - https://github.com/SverreNystad/computer-vision/blob/main/docs/TDT4265_project_2025_v1.0.pdf
+
+
 <!--
 1. **Configure environment variables**:
     This project uses environment variables for configuration. Copy the example environment file to create your own:

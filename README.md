@@ -31,6 +31,11 @@
 ## Description
 
 <!-- TODO: Provide a brief overview of what this project does and its key features. Please add pictures or videos of the application -->
+CancerVision is an AI project that uses computer vision and deep learning to segment brain tumors from MRI scans.
+It identifies tumor regions such as the core, edema, and enhancing areas to support medical analysis and treatment planning.
+The aim is to build accurate models that reduce manual work and improve consistency in diagnosis.
+
+
 
 ## 🛠️ Prerequisites
 

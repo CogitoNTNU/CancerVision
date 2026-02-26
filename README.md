@@ -1,6 +1,6 @@
 <!-- TODO: CHANGE ALL INSTANCES OF "PROJECT-TEMPLATE" IN ENTIRE PROJECT TO YOUR PROJECT TITLE-->
 
-# PROJECT-TEMPLATE
+# CancerVision
 
 <div align="center">
 
@@ -14,7 +14,7 @@
 </div>
 
 <details> 
-<summary><b>📋 Table of contents </b></summary>
+<summary><b> Table of contents </b></summary>
 
 - [PROJECT-TEMPLATE](#PROJECT-TEMPLATE)
   - [Description](#description)
@@ -57,8 +57,8 @@ For example: OS version, programs, libraries, etc.
 1. **Clone the repository**:
 
    ```sh
-   git clone https://github.com/CogitoNTNU/PROJECT-TEMPLATE.git
-   cd PROJECT-TEMPLATE
+   git clone https://github.com/CogitoNTNU/CancerVision
+   cd CancerVision
    ```
 
 1. **Install dependencies**:

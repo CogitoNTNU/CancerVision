@@ -18,10 +18,10 @@
 
 - [PROJECT-TEMPLATE](#PROJECT-TEMPLATE)
   - [Description](#description)
-  - [🛠️ Prerequisites](#%EF%B8%8F-prerequisites)
+  - [Prerequisites](#%EF%B8%8F-prerequisites)
   - [Getting started](#getting-started)
   - [Usage](#usage)
-    - [📖 Generate Documentation Site](#-generate-documentation-site)
+    - [Generate Documentation Site](#-generate-documentation-site)
   - [Testing](#testing)
   - [Team](#team)
     - [License](#license)
@@ -37,7 +37,7 @@ The aim is to build accurate models that reduce manual work and improve consiste
 
 
 
-## 🛠️ Prerequisites
+## Prerequisites
 
 <!-- TODO: In this section you put what is needed for the program to run.
 For example: OS version, programs, libraries, etc.  
@@ -97,7 +97,7 @@ To run the project, run the following command from the root directory of the pro
 
 <!-- TODO: Instructions on how to run the project and use its features. -->
 
-### 📖 Generate Documentation Site
+### Generate Documentation Site
 
 To build and preview the documentation site locally:
 

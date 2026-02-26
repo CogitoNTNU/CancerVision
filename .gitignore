@@ -252,3 +252,6 @@ lerna-debug.log
 # System Files
 .DS_Store
 Thumbs.db
+
+# Training dataset
+res/HNTSMRG24_train/

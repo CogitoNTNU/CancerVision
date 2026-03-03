@@ -255,3 +255,6 @@ Thumbs.db
 
 # Training dataset
 res/HNTSMRG24_train/
+
+# Testing
+src/test.py

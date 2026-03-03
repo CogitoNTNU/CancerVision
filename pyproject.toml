@@ -8,8 +8,7 @@ dependencies = [
     "torchvision",
     "numpy",
     "scikit-learn",
-    "wandb",
-    "jupyter",
+    "wandb"
 ]
 
 [tool.uv.sources]

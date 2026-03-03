@@ -253,8 +253,9 @@ lerna-debug.log
 .DS_Store
 Thumbs.db
 
-# Training dataset
+# Training
 res/HNTSMRG24_train/
+runs/**
 
 # Testing
-src/test.py
+# src/test.py

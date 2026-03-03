@@ -4,6 +4,7 @@ exclude: |
   (?x)^(
       docs/site/.*|       # Exclude mkdocs compiled files
       docs/docs/jupyter-notebooks_files/.*|       # Exclude Jupyter Notebooks files
+      frontend/.*|       # Exclude frontend build and assets
       jupyter-experiments/.*|       # Exclude jupyter-experiments
       \.history/.*|       # Exclude history files
       .*cache.*/.*|       # Exclude cache directories

@@ -13,6 +13,7 @@ import logging
 import os
 import sys
 import tempfile
+import pathlib
 from glob import glob
 
 import torch
@@ -36,21 +37,57 @@ from monai.transforms import (
 from monai.visualize import plot_2d_or_3d_image
 
 
-def main(tempdir):
+
+# // def main(tempdir):
+def main(datadir: pathlib.Path):
     monai.config.print_config()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-    # create a temporary directory and 40 random image, mask pairs
-    print(f"generating synthetic data to {tempdir} (this may take a while)")
-    for i in range(40):
-        im, seg = create_test_image_2d(128, 128, num_seg_classes=1)
-        Image.fromarray((im * 255).astype("uint8")).save(os.path.join(tempdir, f"img{i:d}.png"))
-        Image.fromarray((seg * 255).astype("uint8")).save(os.path.join(tempdir, f"seg{i:d}.png"))
+    # ? DEPRECATED: the following code is for generating synthetic data
+    # // # create a temporary directory and 40 random image, mask pairs
+    # // print(f"generating synthetic data to {tempdir} (this may take a while)")
+    # // for i in range(40):
+    # //     im, seg = create_test_image_2d(128, 128, num_seg_classes=1)
+    # //     Image.fromarray((im * 255).astype("uint8")).save(os.path.join(tempdir, f"img{i:d}.png"))
+    # //     Image.fromarray((seg * 255).astype("uint8")).save(os.path.join(tempdir, f"seg{i:d}.png"))
 
-    images = sorted(glob(os.path.join(tempdir, "img*.png")))
-    segs = sorted(glob(os.path.join(tempdir, "seg*.png")))
-    train_files = [{"img": img, "seg": seg} for img, seg in zip(images[:20], segs[:20])]
-    val_files = [{"img": img, "seg": seg} for img, seg in zip(images[-20:], segs[-20:])]
+    # // images = sorted(glob(os.path.join(tempdir, "img*.png")))
+    # // segs = sorted(glob(os.path.join(tempdir, "seg*.png")))
+    # // train_files = [{"img": img, "seg": seg} for img, seg in zip(images[:20], segs[:20])]
+    # // val_files = [{"img": img, "seg": seg} for img, seg in zip(images[-20:], segs[-20:])]
+
+    # Load the training data
+    print(f"loading training data from {datadir} (this may take a while)")
+
+    # Direcories for images and masks
+    imageDirectory = datadir / "images"
+    maskDirectory = datadir / "masks"
+    
+    # Get the list of image and mask files
+    images = sorted(imageDirectory.glob("img*.png"))
+    segs = sorted(maskDirectory.glob("seg*.png"))
+
+    # Total number of images in the dataset
+    totalImages = len(images)
+    print(f"total number of images: {totalImages}")
+
+    # Split the dataset into training and validation sets (80% training, 20% validation)
+    splitIndex = int(0.8 * totalImages)
+
+    train_files = [
+        {"img": img, "seg": seg} 
+        for img, seg in zip(
+            images[:splitIndex], 
+            segs[:splitIndex]
+        )
+    ]
+    val_files = [
+        {"img": img, "seg": seg} 
+        for img, seg in zip(
+            images[splitIndex:], 
+            segs[splitIndex:]
+        )
+    ]
 
     # define transforms for image and segmentation
     train_transforms = Compose(
@@ -177,5 +214,11 @@ def main(tempdir):
 
 
 if __name__ == "__main__":
-    with tempfile.TemporaryDirectory() as tempdir:
-        main(tempdir)
+    # ? DEPRECATED: the following code is for generating synthetic data
+    # // with tempfile.TemporaryDirectory() as tempdir:
+    # //     main(tempdir)
+
+    DATASET_DIRECTORY = os.path.join(pathlib.Path(__file__).parent.parent, "res/dataset")
+    DATASET_NAME = "brain_tumor_dataset"
+
+    main(datadir=pathlib.Path(DATASET_DIRECTORY, DATASET_NAME))

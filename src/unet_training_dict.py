@@ -16,6 +16,8 @@ import tempfile
 import pathlib
 from glob import glob
 
+from logger.local import TrainingLogger
+
 import torch
 from PIL import Image
 from torch.utils.tensorboard import SummaryWriter
@@ -113,9 +115,19 @@ def main(datadir: pathlib.Path):
 
 
     # * Training
-    TRAINING_BATCH_SIZE     = 6
-    VALIDATION_BATCH_SIZE   = 1
+    # Hyperparameters
+    TRAINING_BATCH_SIZE     = 64
+    VALIDATION_BATCH_SIZE   = 32
     EPOCHS                  = 10
+
+    # Logger
+    logger = TrainingLogger(logFile="training.log")
+    logger.logTrainingConfig(
+        training_batch_size=TRAINING_BATCH_SIZE,
+        validation_batch_size=VALIDATION_BATCH_SIZE,
+        epochs=EPOCHS
+    )
+
 
     # define dataset, data loader
     check_ds = monai.data.Dataset(data=train_files, transform=train_transforms)
@@ -161,8 +173,10 @@ def main(datadir: pathlib.Path):
     metric_values = list()
     writer = SummaryWriter()
     for epoch in range(EPOCHS):
-        print("-" * 10)
-        print(f"epoch {epoch + 1}/{EPOCHS}")
+        # print("-" * 10)
+        logger.log("-" * 10)
+        # print(f"epoch {epoch + 1}/{EPOCHS}")
+        logger.log(f"epoch {epoch + 1}/{EPOCHS}")
         model.train()
         epoch_loss = 0
         step = 0
@@ -180,7 +194,8 @@ def main(datadir: pathlib.Path):
             writer.add_scalar("train_loss", loss.item(), epoch_len * epoch + step)
         epoch_loss /= step
         epoch_loss_values.append(epoch_loss)
-        print(f"epoch {epoch + 1} average loss: {epoch_loss:.4f}")
+        # print(f"epoch {epoch + 1} average loss: {epoch_loss:.4f}")
+        logger.logEpochMetrics(epoch + 1, average_loss=epoch_loss)
 
         if (epoch + 1) % val_interval == 0:
             model.eval()
@@ -206,10 +221,16 @@ def main(datadir: pathlib.Path):
                     best_metric_epoch = epoch + 1
                     torch.save(model.state_dict(), "best_metric_model_segmentation2d_dict.pth")
                     print("saved new best metric model")
-                print(
-                    "current epoch: {} current mean dice: {:.4f} best mean dice: {:.4f} at epoch {}".format(
-                        epoch + 1, metric, best_metric, best_metric_epoch
-                    )
+                # print(
+                #     "current epoch: {} current mean dice: {:.4f} best mean dice: {:.4f} at epoch {}".format(
+                #         epoch + 1, metric, best_metric, best_metric_epoch
+                #     )
+                # )
+                logger.logValidationResults(
+                    currentEpoch=epoch + 1,
+                    current_mean_dice=metric,
+                    best_mean_dice=best_metric,
+                    best_mean_dice_epoch=best_metric_epoch
                 )
                 writer.add_scalar("val_mean_dice", metric, epoch + 1)
                 # plot the last model output as GIF image in TensorBoard with the corresponding image and label
@@ -218,6 +239,7 @@ def main(datadir: pathlib.Path):
                 plot_2d_or_3d_image(val_outputs, epoch + 1, writer, index=0, tag="output")
 
     print(f"train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}")
+    logger.logCompletion(best_metric, best_metric_epoch)
     writer.close()
 
 

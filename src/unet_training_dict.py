@@ -43,6 +43,7 @@ def main(datadir: pathlib.Path):
     monai.config.print_config()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
+    # * Loading
     # ? DEPRECATED: the following code is for generating synthetic data
     # // # create a temporary directory and 40 random image, mask pairs
     # // print(f"generating synthetic data to {tempdir} (this may take a while)")
@@ -68,11 +69,11 @@ def main(datadir: pathlib.Path):
     segs = sorted(maskDirectory.glob("*.png"))
 
     # Total number of images in the dataset
-    totalImages = len(images)
-    print(f"total number of images: {totalImages}")
+    totalSamples = len(images)
+    print(f"total number of images: {totalSamples}")
 
     # Split the dataset into training and validation sets (80% training, 20% validation)
-    splitIndex = int(0.8 * totalImages)
+    splitIndex = int(0.8 * totalSamples)
 
     train_files = [
         {"img": img, "seg": seg} 
@@ -110,10 +111,16 @@ def main(datadir: pathlib.Path):
         ]
     )
 
+
+    # * Training
+    TRAINING_BATCH_SIZE     = 6
+    VALIDATION_BATCH_SIZE   = 1
+    EPOCHS                  = 10
+
     # define dataset, data loader
     check_ds = monai.data.Dataset(data=train_files, transform=train_transforms)
     # use batch_size=2 to load images and use RandCropByPosNegLabeld to generate 2 x 4 images for network training
-    check_loader = DataLoader(check_ds, batch_size=2, num_workers=4, collate_fn=list_data_collate)
+    check_loader = DataLoader(check_ds, batch_size=TRAINING_BATCH_SIZE, num_workers=4, collate_fn=list_data_collate)
     check_data = monai.utils.misc.first(check_loader)
     print(check_data["img"].shape, check_data["seg"].shape)
 
@@ -122,7 +129,7 @@ def main(datadir: pathlib.Path):
     # use batch_size=2 to load images and use RandCropByPosNegLabeld to generate 2 x 4 images for network training
     train_loader = DataLoader(
         train_ds,
-        batch_size=2,
+        batch_size=TRAINING_BATCH_SIZE,
         shuffle=True,
         num_workers=4,
         collate_fn=list_data_collate,
@@ -130,7 +137,7 @@ def main(datadir: pathlib.Path):
     )
     # create a validation data loader
     val_ds = monai.data.Dataset(data=val_files, transform=val_transforms)
-    val_loader = DataLoader(val_ds, batch_size=1, num_workers=4, collate_fn=list_data_collate)
+    val_loader = DataLoader(val_ds, batch_size=VALIDATION_BATCH_SIZE, num_workers=4, collate_fn=list_data_collate)
     dice_metric = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
     # create UNet, DiceLoss and Adam optimizer
@@ -153,9 +160,9 @@ def main(datadir: pathlib.Path):
     epoch_loss_values = list()
     metric_values = list()
     writer = SummaryWriter()
-    for epoch in range(10):
+    for epoch in range(EPOCHS):
         print("-" * 10)
-        print(f"epoch {epoch + 1}/{10}")
+        print(f"epoch {epoch + 1}/{EPOCHS}")
         model.train()
         epoch_loss = 0
         step = 0

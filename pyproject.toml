@@ -8,7 +8,8 @@ dependencies = [
     "torchvision",
     "numpy",
     "scikit-learn",
-    "wandb"
+    "wandb",
+    "nibabel>=5.4.0",
 ]
 
 [tool.uv.sources]
@@ -30,3 +31,4 @@ explicit = true
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
+

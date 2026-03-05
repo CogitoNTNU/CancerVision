@@ -81,7 +81,6 @@ def main(datadir: pathlib.Path):
             segs[:splitIndex]
         )
     ]
-
     val_files = [
         {"img": img, "seg": seg} 
         for img, seg in zip(
@@ -89,6 +88,7 @@ def main(datadir: pathlib.Path):
             segs[splitIndex:]
         )
     ]
+
 
     # define transforms for image and segmentation
     train_transforms = Compose(

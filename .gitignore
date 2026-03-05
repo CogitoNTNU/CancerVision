@@ -254,7 +254,7 @@ lerna-debug.log
 Thumbs.db
 
 # Training
-res/dataset/
+res/dataset/*
 runs/**
 
 # Testing

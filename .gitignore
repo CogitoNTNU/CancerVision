@@ -254,8 +254,7 @@ lerna-debug.log
 Thumbs.db
 
 # Training
-res/HNTSMRG24_train/
-res/NINS_Dataset/
+res/dataset/
 runs/**
 
 # Testing

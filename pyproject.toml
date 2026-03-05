@@ -1,16 +1,15 @@
 [project]
 name = "Cancervision"
 version = "0.1.0"
-requires-python = ">=3.13.0"
+requires-python = "==3.13.*"
 dependencies = [
     "monai",
-  "torch",
-  "torchvision",
-  "numpy",
-  "numba",
-  "tmrl",
-  "scikit-learn",
-  "wandb",
+    "torch",
+    "torchvision",
+    "numpy",
+    "scikit-learn",
+    "wandb",
+    "tensorboard>=2.20.0",
 ]
 
 [tool.uv.sources]

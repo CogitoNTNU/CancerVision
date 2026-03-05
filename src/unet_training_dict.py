@@ -64,8 +64,8 @@ def main(datadir: pathlib.Path):
     maskDirectory = datadir / "masks"
     
     # Get the list of image and mask files
-    images = sorted(imageDirectory.glob("img*.png"))
-    segs = sorted(maskDirectory.glob("seg*.png"))
+    images = sorted(imageDirectory.glob("*.png"))
+    segs = sorted(maskDirectory.glob("*.png"))
 
     # Total number of images in the dataset
     totalImages = len(images)
@@ -81,6 +81,7 @@ def main(datadir: pathlib.Path):
             segs[:splitIndex]
         )
     ]
+
     val_files = [
         {"img": img, "seg": seg} 
         for img, seg in zip(

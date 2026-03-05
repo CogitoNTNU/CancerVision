@@ -255,6 +255,7 @@ Thumbs.db
 
 # Training
 res/HNTSMRG24_train/
+res/NINS_Dataset/
 runs/**
 
 # Testing

@@ -219,7 +219,7 @@ if __name__ == "__main__":
     # // with tempfile.TemporaryDirectory() as tempdir:
     # //     main(tempdir)
 
-    DATASET_DIRECTORY = os.path.join(pathlib.Path(__file__).parent.parent, "res/dataset")
     DATASET_NAME = "brain_tumor_dataset"
+    datasetDirectory = os.path.join(pathlib.Path(__file__).parent.parent, "res/dataset")
 
-    main(datadir=pathlib.Path(DATASET_DIRECTORY, DATASET_NAME))
+    main(datadir=pathlib.Path(datasetDirectory, DATASET_NAME))

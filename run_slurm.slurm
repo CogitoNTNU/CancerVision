@@ -18,18 +18,20 @@ echo "Name of job: $SLURM_JOB_NAME"
 echo "ID of job: $SLURM_JOB_ID"
 echo "The job was run on these nodes: $SLURM_JOB_NODELIST"
 
+
 # CONFIG
 BRANCH="2d-segmentation"
 PULL_ON_RUN=true
 SYNC_ON_RUN=false
 
-
 ENV_PATH="/cluster/home/$(whoami)/CancerVision"
-echo "${ENV_PATH}"
 
+
+# TODO: Add wrapper script to chmod +x and run this script with a single command, e.g. `./run_slurm.sh`
 
 # Change to project directory
 cd "CancerVision"
+
 
 # Switch to the correct branch if not already on it
 currentBranch=$(git rev-parse --abbrev-ref HEAD)
@@ -40,6 +42,7 @@ else
     echo "Already on branch $BRANCH"
 fi
 
+
 # Pull latest changes if PULL_ON_RUN is true
 if [ "$PULL_ON_RUN" = true ]; then
     echo "Fetching latest changes from GitHub..."
@@ -48,6 +51,9 @@ if [ "$PULL_ON_RUN" = true ]; then
     # // git reset --hard HEAD
     # // git pull origin $BRANCH
 fi
+
+# Elevate perms of new run file
+chmod +x run_slurm.slurm
 
 # # Load required modules
 # module purge

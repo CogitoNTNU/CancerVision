@@ -24,8 +24,9 @@ PULL_ON_RUN=true
 SYNC_ON_RUN=false
 
 
-ENV_PATH="/cluster/work/$(whoami)/CancerVision"
-echo "Conda environment path: ${ENV_PATH}"
+ENV_PATH="/cluster/home/$(whoami)/CancerVision"
+echo "${ENV_PATH}"
+
 
 # ? We need to have cloned the repository at least once to be able to run
 # ? this file, so this doesn't make sense to have in the slurm script. 
@@ -36,8 +37,8 @@ echo "Conda environment path: ${ENV_PATH}"
 # //     CLONED=true
 # // fi
 
-# // Change to project directory
-# // cd "CancerVision"
+Change to project directory
+cd "CancerVision"
 
 # Switch to the correct branch if not already on it
 currentBranch=$(git rev-parse --abbrev-ref HEAD)

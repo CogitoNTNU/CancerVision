@@ -1,6 +1,6 @@
 #!/bin/sh
 #SBATCH --account=studiegrupper-cogito
-#SBATCH --job-name="DQN_training"
+#SBATCH --job-name="Cancer Vision UNet 2D"
 #SBATCH --time=00:00:05
 #SBATCH --partition=GPUQ
 #SBATCH --gres=gpu:v100:1
@@ -19,7 +19,7 @@ echo "ID of job: $SLURM_JOB_ID"
 echo "The job was run on these nodes: $SLURM_JOB_NODELIST"
 
 # CONFIG
-BRANCH="segmentation-2d"
+BRANCH="2d-segmentation"
 PULL_ON_RUN=true
 SYNC_ON_RUN=false
 

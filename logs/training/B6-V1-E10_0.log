@@ -1,0 +1,35 @@
+[Training configuration]
+Training Batch Size    : 6
+Validation Batch Size  : 1
+Epochs                 : 10
+
+
+--------------------
+[Epoch 1 metrics]
+ - Average Loss: 0.7428815769974352
+[Epoch 2 metrics]
+ - Average Loss: 0.67486358752752
+[Epoch 2 validation results]
+ - Current Mean Dice: 0.05998215824365616
+ - Best Mean Dice: 0.05998215824365616
+ - Best Mean Dice Epoch: 2
+[Epoch 3 metrics]
+ - Average Loss: 0.6341261857150527
+[Epoch 4 metrics]
+ - Average Loss: 0.6259518484323123
+[Epoch 4 validation results]
+ - Current Mean Dice: 0.062322620302438736
+ - Best Mean Dice: 0.062322620302438736
+ - Best Mean Dice Epoch: 4
+[Epoch 5 metrics]
+ - Average Loss: 0.6012464473912069
+[Epoch 6 metrics]
+ - Average Loss: 0.5990668356710075
+[Epoch 6 validation results]
+ - Current Mean Dice: 0.06536765396595001
+ - Best Mean Dice: 0.06536765396595001
+ - Best Mean Dice Epoch: 6
+[Epoch 7 metrics]
+ - Average Loss: 0.6035221173885691
+[Epoch 8 metrics]
+ - Average Loss: 0.5914038689328872

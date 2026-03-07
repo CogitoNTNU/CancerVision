@@ -115,6 +115,7 @@ def main(datadir: pathlib.Path):
 
 
     # * Training
+    # TODO: Move this to global
     # Hyperparameters
     TRAINING_BATCH_SIZE     = 6
     VALIDATION_BATCH_SIZE   = 1

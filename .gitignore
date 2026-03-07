@@ -220,6 +220,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+!logs/
+!logs/training/
+!logs/training/*.log
 
 # Dependency directories
 node_modules/

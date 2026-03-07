@@ -16,7 +16,7 @@ import tempfile
 import pathlib
 from glob import glob
 
-from logger.local import TrainingLogger
+from logger.train import TrainingLogger
 
 import torch
 from PIL import Image
@@ -121,10 +121,9 @@ def main(datadir: pathlib.Path):
     EPOCHS                  = 10
 
     # Logger
-    logger = TrainingLogger(logFile="training.log")
-    logger.logTrainingConfig(
-        training_batch_size=TRAINING_BATCH_SIZE,
-        validation_batch_size=VALIDATION_BATCH_SIZE,
+    logger = TrainingLogger(
+        trainingBatchSize=TRAINING_BATCH_SIZE,
+        validationBatchSize=VALIDATION_BATCH_SIZE,
         epochs=EPOCHS
     )
 
@@ -177,10 +176,10 @@ def main(datadir: pathlib.Path):
     metric_values = list()
     writer = SummaryWriter()
     for epoch in range(EPOCHS):
-        # print("-" * 10)
+        print("-" * 10)
         logger.log("-" * 10)
-        # print(f"epoch {epoch + 1}/{EPOCHS}")
-        logger.log(f"epoch {epoch + 1}/{EPOCHS}")
+        print(f"epoch {epoch + 1}/{EPOCHS}")
+        # logger.log(f"epoch {epoch + 1}/{EPOCHS}")
         model.train()
         epoch_loss = 0
         step = 0
@@ -199,7 +198,7 @@ def main(datadir: pathlib.Path):
         epoch_loss /= step
         epoch_loss_values.append(epoch_loss)
         # print(f"epoch {epoch + 1} average loss: {epoch_loss:.4f}")
-        logger.logEpochMetrics(epoch + 1, average_loss=epoch_loss)
+        logger.logEpochMetrics(epoch=(epoch + 1), average_loss=epoch_loss)
 
         if (epoch + 1) % val_interval == 0:
             model.eval()
@@ -236,6 +235,7 @@ def main(datadir: pathlib.Path):
                     best_mean_dice=best_metric,
                     best_mean_dice_epoch=best_metric_epoch
                 )
+
                 writer.add_scalar("val_mean_dice", metric, epoch + 1)
                 # plot the last model output as GIF image in TensorBoard with the corresponding image and label
                 plot_2d_or_3d_image(val_images, epoch + 1, writer, index=0, tag="image")

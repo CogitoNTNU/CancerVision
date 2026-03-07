@@ -28,15 +28,6 @@ ENV_PATH="/cluster/home/$(whoami)/CancerVision"
 echo "${ENV_PATH}"
 
 
-# ? We need to have cloned the repository at least once to be able to run
-# ? this file, so this doesn't make sense to have in the slurm script. 
-# // Create repository if it doesn't exist
-# // if [ ! -d "${ENV_PATH}" ]; then
-# //     echo "Cloning project from GitHub..."
-# //     git clone -b $BRANCH https://github.com/CogitoNTNU/CancerVision.git
-# //     CLONED=true
-# // fi
-
 # Change to project directory
 cd "CancerVision"
 
@@ -49,16 +40,13 @@ else
     echo "Already on branch $BRANCH"
 fi
 
-# // Pull latest changes if PULL_ON_RUN is true and CLONED is not true (to avoid pulling immediately after cloning)
-# // if [ "$PULL_ON_RUN" = true ] && [ "${CLONED:-false}" != true ]; then
-
 # Pull latest changes if PULL_ON_RUN is true
 if [ "$PULL_ON_RUN" = true ]; then
     echo "Fetching latest changes from GitHub..."
     git fetch origin $BRANCH
     git reset --hard origin/$BRANCH
-    # git reset --hard HEAD
-    # git pull origin $BRANCH
+    # // git reset --hard HEAD
+    # // git pull origin $BRANCH
 fi
 
 # # Load required modules

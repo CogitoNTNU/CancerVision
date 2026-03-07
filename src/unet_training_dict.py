@@ -40,25 +40,11 @@ from monai.transforms import (
 from monai.visualize import plot_2d_or_3d_image
 
 
-# // def main(tempdir):
 def main(datadir: pathlib.Path):
     monai.config.print_config()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
     # * Loading
-    # ? DEPRECATED: the following code is for generating synthetic data
-    # // # create a temporary directory and 40 random image, mask pairs
-    # // print(f"generating synthetic data to {tempdir} (this may take a while)")
-    # // for i in range(40):
-    # //     im, seg = create_test_image_2d(128, 128, num_seg_classes=1)
-    # //     Image.fromarray((im * 255).astype("uint8")).save(os.path.join(tempdir, f"img{i:d}.png"))
-    # //     Image.fromarray((seg * 255).astype("uint8")).save(os.path.join(tempdir, f"seg{i:d}.png"))
-
-    # // images = sorted(glob(os.path.join(tempdir, "img*.png")))
-    # // segs = sorted(glob(os.path.join(tempdir, "seg*.png")))
-    # // train_files = [{"img": img, "seg": seg} for img, seg in zip(images[:20], segs[:20])]
-    # // val_files = [{"img": img, "seg": seg} for img, seg in zip(images[-20:], segs[-20:])]
-
     # Load the training data
     print(f"loading training data from {datadir} (this may take a while)")
 
@@ -164,9 +150,7 @@ def main(datadir: pathlib.Path):
     writer = SummaryWriter()
     for epoch in range(EPOCHS):
         print("-" * 10)
-        # logger.log("-" * 10)
         print(f"epoch {epoch + 1}/{EPOCHS}")
-        # logger.log(f"epoch {epoch + 1}/{EPOCHS}")
         model.train()
         epoch_loss = 0
         step = 0
@@ -184,7 +168,6 @@ def main(datadir: pathlib.Path):
             writer.add_scalar("train_loss", loss.item(), epoch_len * epoch + step)
         epoch_loss /= step
         epoch_loss_values.append(epoch_loss)
-        # print(f"epoch {epoch + 1} average loss: {epoch_loss:.4f}")
         logger.logEpochMetrics(epoch=(epoch + 1), average_loss=epoch_loss)
 
         if (epoch + 1) % val_interval == 0:
@@ -211,11 +194,6 @@ def main(datadir: pathlib.Path):
                     best_metric_epoch = epoch + 1
                     torch.save(model.state_dict(), "best_metric_model_segmentation2d_dict.pth")
                     print("saved new best metric model")
-                # print(
-                #     "current epoch: {} current mean dice: {:.4f} best mean dice: {:.4f} at epoch {}".format(
-                #         epoch + 1, metric, best_metric, best_metric_epoch
-                #     )
-                # )
                 logger.logValidationResults(
                     currentEpoch=epoch + 1,
                     current_mean_dice=metric,
@@ -253,10 +231,6 @@ if __name__ == "__main__":
     )
 
     # Dataset
-    # ? DEPRECATED: the following code is for generating synthetic data
-    # // with tempfile.TemporaryDirectory() as tempdir:
-    # //     main(tempdir)
-
     DATASET_NAME = "brain_tumor_dataset"
     datasetDirectory = os.path.join(pathlib.Path(__file__).parent.parent, "res/dataset")
 

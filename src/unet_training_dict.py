@@ -177,7 +177,7 @@ def main(datadir: pathlib.Path):
     writer = SummaryWriter()
     for epoch in range(EPOCHS):
         print("-" * 10)
-        logger.log("-" * 10)
+        # logger.log("-" * 10)
         print(f"epoch {epoch + 1}/{EPOCHS}")
         # logger.log(f"epoch {epoch + 1}/{EPOCHS}")
         model.train()

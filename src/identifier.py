@@ -1,6 +1,20 @@
 import os
 
 
+
+class Cache:
+    # Static variables
+    __data = {}
+
+    # Methods
+    @classmethod
+    def identifier(cls: 'Cache', key: tuple) -> (str | None): 
+        return cls.__data.get(key)
+
+    @classmethod
+    def enter(cls: 'Cache', cacheKey: tuple, value: str) -> None: 
+        cls.__data[cacheKey] = value
+
 @staticmethod
 def id(
     modelType: str,
@@ -10,6 +24,12 @@ def id(
     versions: str = "logs/training",
     extension: str | None = ".log"
 ) -> str:
+    # Check if the identifier has already been generated and cached, if so return it
+    cacheKey = (modelType, trainingBatchSize, validationBatchSize, epochs)
+    if (cachedID := Cache.identifier(cacheKey)): 
+        print(f"Identifier retrieved from cache: {cachedID}")
+        return cachedID
+
     # Generate a unique identifier based on the training configuration parameters
     pattern = f"{modelType}-B{trainingBatchSize}-V{validationBatchSize}-E{epochs}"
     previousVersions = [                                                               
@@ -22,4 +42,9 @@ def id(
     # Add a version number to the identifier incase we retrain with the same parameters
     version = len(previousVersions)
 
-    return f"{pattern}_{version}"
+    # Cache the generated identifier for future use and return it
+    identifier = f"{pattern}_{version}"
+    print(f"Generated new identifier: {identifier}")
+    Cache.enter(cacheKey, identifier)
+
+    return identifier

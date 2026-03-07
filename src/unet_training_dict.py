@@ -229,7 +229,7 @@ if __name__ == "__main__":
         validationBatchSize=VALIDATION_BATCH_SIZE,
         epochs=EPOCHS
     )
-
+    
     # Dataset
     DATASET_NAME = "brain_tumor_dataset"
     datasetDirectory = os.path.join(pathlib.Path(__file__).parent.parent, "res/dataset")

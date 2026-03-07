@@ -25,6 +25,7 @@ SYNC_ON_RUN=false
 
 
 ENV_PATH="/cluster/work/$(whoami)/CancerVision"
+echo "Conda environment path: ${ENV_PATH}"
 
 # ? We need to have cloned the repository at least once to be able to run
 # ? this file, so this doesn't make sense to have in the slurm script. 

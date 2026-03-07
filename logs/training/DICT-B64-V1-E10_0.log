@@ -5,3 +5,44 @@ Epochs                 : 10
 
 
 --------------------
+[Epoch 1 metrics]
+ - Average Loss: 0.7797798193418063
+[Epoch 2 metrics]
+ - Average Loss: 0.7455523686531262
+[Epoch 2 validation results]
+ - Current Mean Dice: 0.05374886840581894
+ - Best Mean Dice: 0.05374886840581894
+ - Best Mean Dice Epoch: 2
+[Epoch 3 metrics]
+ - Average Loss: 0.7353369777019207
+[Epoch 4 metrics]
+ - Average Loss: 0.7191322216620812
+[Epoch 4 validation results]
+ - Current Mean Dice: 0.05700570344924927
+ - Best Mean Dice: 0.05700570344924927
+ - Best Mean Dice Epoch: 4
+[Epoch 5 metrics]
+ - Average Loss: 0.7048000723887713
+[Epoch 6 metrics]
+ - Average Loss: 0.6852771930205517
+[Epoch 6 validation results]
+ - Current Mean Dice: 0.05365307629108429
+ - Best Mean Dice: 0.05700570344924927
+ - Best Mean Dice Epoch: 4
+[Epoch 7 metrics]
+ - Average Loss: 0.6825363865265479
+[Epoch 8 metrics]
+ - Average Loss: 0.6725612099354084
+[Epoch 8 validation results]
+ - Current Mean Dice: 0.057377949357032776
+ - Best Mean Dice: 0.057377949357032776
+ - Best Mean Dice Epoch: 8
+[Epoch 9 metrics]
+ - Average Loss: 0.6602004231550754
+[Epoch 10 metrics]
+ - Average Loss: 0.6514236499101688
+[Epoch 10 validation results]
+ - Current Mean Dice: 0.062199193984270096
+ - Best Mean Dice: 0.062199193984270096
+ - Best Mean Dice Epoch: 10
+Training completed. Best metric: 0.0622 at epoch: 10

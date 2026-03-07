@@ -55,7 +55,8 @@ fi
 # Pull latest changes if PULL_ON_RUN is true
 if [ "$PULL_ON_RUN" = true ]; then
     echo "Pulling latest changes from GitHub..."
-    git pull origin $BRANCH
+    git reset --hard HEAD
+    # // git pull origin $BRANCH
 fi
 
 # # Load required modules

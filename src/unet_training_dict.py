@@ -192,7 +192,7 @@ def main(datadir: pathlib.Path):
                 if metric > best_metric:
                     best_metric = metric
                     best_metric_epoch = epoch + 1
-                    torch.save(model.state_dict(), "best_metric_model_segmentation2d_dict.pth")
+                    torch.save(model.state_dict(), f"models/{identifier}.pth")
                     print("saved new best metric model")
                 logger.logValidationResults(
                     currentEpoch=epoch + 1,

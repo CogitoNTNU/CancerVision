@@ -39,16 +39,19 @@ ENV_PATH="/cluster/work/$(whoami)/CancerVision"
 # // cd "CancerVision"
 
 # Switch to the correct branch if not already on it
-current_branch=$(git rev-parse --abbrev-ref HEAD)
-if [ "$current_branch" != "$BRANCH" ]; then
+currentBranch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$currentBranch" != "$BRANCH" ]; then
     echo "Switching to branch $BRANCH..."
     git checkout $BRANCH
 else 
     echo "Already on branch $BRANCH"
 fi
 
-# Pull latest changes if PULL_ON_RUN is true and CLONED is not true (to avoid pulling immediately after cloning)
-if [ "$PULL_ON_RUN" = true ] && [ "${CLONED:-false}" != true ]; then
+# // Pull latest changes if PULL_ON_RUN is true and CLONED is not true (to avoid pulling immediately after cloning)
+# // if [ "$PULL_ON_RUN" = true ] && [ "${CLONED:-false}" != true ]; then
+
+# Pull latest changes if PULL_ON_RUN is true
+if [ "$PULL_ON_RUN" = true ]; then
     echo "Pulling latest changes from GitHub..."
     git pull origin $BRANCH
 fi

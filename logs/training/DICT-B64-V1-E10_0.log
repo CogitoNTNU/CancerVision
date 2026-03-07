@@ -1,0 +1,7 @@
+[Training configuration]
+Training Batch Size    : 64
+Validation Batch Size  : 1
+Epochs                 : 10
+
+
+--------------------

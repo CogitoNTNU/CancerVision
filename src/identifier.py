@@ -26,9 +26,7 @@ def id(
 ) -> str:
     # Check if the identifier has already been generated and cached, if so return it
     cacheKey = (modelType, trainingBatchSize, validationBatchSize, epochs)
-    if (cachedID := Cache.identifier(cacheKey)): 
-        print(f"Identifier retrieved from cache: {cachedID}")
-        return cachedID
+    if (cachedID := Cache.identifier(cacheKey)): return cachedID
 
     # Generate a unique identifier based on the training configuration parameters
     pattern = f"{modelType}-B{trainingBatchSize}-V{validationBatchSize}-E{epochs}"
@@ -44,7 +42,6 @@ def id(
 
     # Cache the generated identifier for future use and return it
     identifier = f"{pattern}_{version}"
-    print(f"Generated new identifier: {identifier}")
     Cache.enter(cacheKey, identifier)
 
     return identifier

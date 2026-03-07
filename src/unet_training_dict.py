@@ -214,7 +214,7 @@ def main(datadir: pathlib.Path):
 
 if __name__ == "__main__":
     # Hyperparameters
-    TRAINING_BATCH_SIZE     = 6
+    TRAINING_BATCH_SIZE     = 64
     VALIDATION_BATCH_SIZE   = 1
     EPOCHS                  = 10
 
@@ -229,7 +229,7 @@ if __name__ == "__main__":
         validationBatchSize=VALIDATION_BATCH_SIZE,
         epochs=EPOCHS
     )
-    
+
     # Dataset
     DATASET_NAME = "brain_tumor_dataset"
     datasetDirectory = os.path.join(pathlib.Path(__file__).parent.parent, "res/dataset")

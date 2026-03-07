@@ -1,74 +1,81 @@
-#!/bin/bash
-#SBATCH --job-name=brats-unet
-#SBATCH --output=logs/brats_%j.out
-#SBATCH --error=logs/brats_%j.err
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
-#SBATCH --time=04:00:00
+#!/bin/sh
+#SBATCH --account=studiegrupper-cogito
+#SBATCH --job-name="DQN_training"
+#SBATCH --time=00:30:00
+#SBATCH --partition=GPUQ
+#SBATCH --gres=gpu:v100:1
+#SBATCH --mem=32GB
 #SBATCH --nodes=1
-#SBATCH --ntasks=1
+#SBATCH --output=slurm_outputs/output_combined.txt
+#SBATCH --error=slurm_outputs/output_combined.err
+#SBATCH --mail-user=ludvigho@ntnu.no
+#SBATCH --mail-type=ALL
 
-# ──────────────────────────────────────────────────────────────
-#  BraTS 2020 2D U-Net Training — SLURM batch script
-#
-#  Submit from the project root:
-#      sbatch scripts/train_brats.slurm
-#
-#  Or via SSH:
-#      ssh <user>@<host> "cd /path/to/cancervision && sbatch scripts/train_brats.slurm"
-# ──────────────────────────────────────────────────────────────
+WORKDIR=${SLURM_SUBMIT_DIR}
+cd ${WORKDIR}
+echo "Running from this directory: $SLURM_SUBMIT_DIR"
+echo "Name of job: $SLURM_JOB_NAME"
+echo "ID of job: $SLURM_JOB_ID"
+echo "The job was run on these nodes: $SLURM_JOB_NODELIST"
 
-set -euo pipefail
+ENV_PATH="/cluster/work/$(whoami)/DEEPTACTICS-TRACKMANIA"
 
-# ── Paths ────────────────────────────────────────────────────
-PROJECT_DIR="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
-cd "$PROJECT_DIR"
+# Load required modules
+module purge
+module load Anaconda3/2024.02-1
+module load SWIG/4.1.1-GCCcore-12.3.0  # Required for Box2D compilation
 
-echo "============================================"
-echo "Job ID      : $SLURM_JOB_ID"
-echo "Job Name    : $SLURM_JOB_NAME"
-echo "Node        : $(hostname)"
-echo "GPUs        : $SLURM_GPUS_ON_NODE"
-echo "CPUs        : $SLURM_CPUS_PER_TASK"
-echo "Project dir : $PROJECT_DIR"
-echo "Date        : $(date)"
-echo "============================================"
+# Create conda environment only if it doesn't exist
+if [ ! -d "${ENV_PATH}" ]; then
+    echo "Creating new conda environment..."
+    conda create -y --prefix ${ENV_PATH} python=3.11
+else
+    echo "Conda environment already exists, skipping creation."
+fi
 
-# ── Environment ──────────────────────────────────────────────
-# Activate a virtual-env / conda env — uncomment & edit the one
-# that matches your cluster setup.
+# Activate the environment
+source activate ${ENV_PATH}
 
-# Option A: venv
-# source .venv/bin/activate
+# Load environment variables from .env file (ignore comments and empty lines)
+if [ -f "${WORKDIR}/.env" ]; then
+    echo "Loading environment variables from .env..."
+    set -a  # Automatically export all variables
+    source <(grep -v '^#' ${WORKDIR}/.env | grep -v '^$')
+    set +a
+else
+    echo "Warning: .env file not found. W&B logging may not work."
+fi
 
-# Option B: conda / mamba
-# source "$(conda info --base)/etc/profile.d/conda.sh"
-# conda activate cancervision
+# Add project root to Python path so 'src' can be found as a module
+export PYTHONPATH="${WORKDIR}:${PYTHONPATH}"
+echo "PYTHONPATH set to: ${PYTHONPATH}"
 
-# Option C: module system
-module load python/3.13 cuda/12.x
-source .venv/bin/activate
+# Enable headless rendering for MuJoCo (EGL backend)
+export MUJOCO_GL=egl
+export PYOPENGL_PLATFORM=egl
 
-# ── Create log directory ─────────────────────────────────────
-mkdir -p logs
+# Install/update dependencies
+echo "Installing/updating dependencies..."
+pip install -r requirements.txt
 
-# ── Verify GPU visibility ───────────────────────────────────
+echo "Installed packages:"
+pip freeze
+
+# Check GPU info
+echo "================================================"
+echo "GPU Information:"
+echo "================================================"
+nvidia-smi
 echo ""
-python -c "import torch; print(f'PyTorch {torch.__version__}  |  CUDA available: {torch.cuda.is_available()}  |  Devices: {torch.cuda.device_count()}')"
-nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null || true
+echo "PyTorch CUDA availability:"
+python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
+echo "================================================"
 echo ""
 
-# ── Launch training ──────────────────────────────────────────
-python src/models/train_brats.py \
-    --data-dir  res/data/archive/BraTS2020_training_data/content/data \
-    --save-dir  res/models \
-    --max-epochs 10 \
-    --batch-size 16 \
-    --lr 1e-4 \
-    --num-workers "$SLURM_CPUS_PER_TASK" \
-    --seed 0
+# Run the training script
+python main.py
 
-echo ""
-echo "Done — $(date)"
+# Deactivate the environment
+conda deactivate
+
+echo "Job finished"

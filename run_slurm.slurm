@@ -27,14 +27,14 @@ SYNC_ON_RUN=false
 ENV_PATH="/cluster/work/$(whoami)/CancerVision"
 
 # Create repository if it doesn't exist
-if [ ! -d "${ENV_PATH}" ]; then
-    echo "Cloning project from GitHub..."
-    git clone -b $BRANCH https://github.com/CogitoNTNU/CancerVision.git
-    CLONED=true
-fi
+# if [ ! -d "${ENV_PATH}" ]; then
+#     echo "Cloning project from GitHub..."
+#     git clone -b $BRANCH https://github.com/CogitoNTNU/CancerVision.git
+#     CLONED=true
+# fi
 
 # Change to project directory
-cd "CancerVision"
+# cd "CancerVision"
 
 # Pull latest changes if PULL_ON_RUN is true and CLONED is not true (to avoid pulling immediately after cloning)
 if [ "$PULL_ON_RUN" = true ] && [ "${CLONED:-false}" != true ]; then

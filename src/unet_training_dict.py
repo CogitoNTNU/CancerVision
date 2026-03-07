@@ -17,6 +17,7 @@ import pathlib
 from glob import glob
 
 from logger.train import TrainingLogger
+from identifier import id
 
 import torch
 from PIL import Image
@@ -37,7 +38,6 @@ from monai.transforms import (
     ScaleIntensityd,
 )
 from monai.visualize import plot_2d_or_3d_image
-
 
 
 # // def main(tempdir):
@@ -115,20 +115,6 @@ def main(datadir: pathlib.Path):
 
 
     # * Training
-    # TODO: Move this to global
-    # Hyperparameters
-    TRAINING_BATCH_SIZE     = 6
-    VALIDATION_BATCH_SIZE   = 1
-    EPOCHS                  = 10
-
-    # Logger
-    logger = TrainingLogger(
-        trainingBatchSize=TRAINING_BATCH_SIZE,
-        validationBatchSize=VALIDATION_BATCH_SIZE,
-        epochs=EPOCHS
-    )
-
-
     # define dataset, data loader
     check_ds = monai.data.Dataset(data=train_files, transform=train_transforms)
     # use batch_size=2 to load images and use RandCropByPosNegLabeld to generate 2 x 4 images for network training
@@ -249,6 +235,24 @@ def main(datadir: pathlib.Path):
 
 
 if __name__ == "__main__":
+    # Hyperparameters
+    TRAINING_BATCH_SIZE     = 6
+    VALIDATION_BATCH_SIZE   = 1
+    EPOCHS                  = 10
+
+    # Model type identifier (DO NOT CHANGE)
+    MODEL_TYPE = "DICT"
+
+    # Logging & saving
+    identifier = id(MODEL_TYPE, TRAINING_BATCH_SIZE, VALIDATION_BATCH_SIZE, EPOCHS)
+    logger = TrainingLogger(
+        modelType=MODEL_TYPE,
+        trainingBatchSize=TRAINING_BATCH_SIZE,
+        validationBatchSize=VALIDATION_BATCH_SIZE,
+        epochs=EPOCHS
+    )
+
+    # Dataset
     # ? DEPRECATED: the following code is for generating synthetic data
     # // with tempfile.TemporaryDirectory() as tempdir:
     # //     main(tempdir)

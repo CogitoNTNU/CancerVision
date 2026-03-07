@@ -1,9 +1,11 @@
+from identifier import id
 import logging
 import os
 
 
 class TrainingLogger:
     def __init__(self, 
+        modelType: str,
         trainingBatchSize: int,
         validationBatchSize: int, 
         epochs: int,
@@ -46,15 +48,8 @@ class TrainingLogger:
         LOG_EXTENSION = ".log"
         os.makedirs(LOG_DIRECTORY, exist_ok=True)
 
-        baseName = f"B{trainingBatchSize}-V{validationBatchSize}-E{epochs}_"
-        existingFiles = [                                                               
-            f                                                                           # List all files in the  
-            for f in os.listdir(LOG_DIRECTORY)                                          # LOG_DIRECTORY that start with
-            if (f.startswith(baseName) and f.endswith(LOG_EXTENSION))                   # the baseName and end with .log
-        ]
-
-        version = len(existingFiles)
-        filename = f"{baseName}{version}{LOG_EXTENSION}"
+        identifier = id(modelType, trainingBatchSize, validationBatchSize, epochs)
+        filename = f"{identifier}{LOG_EXTENSION}"
         filepath = os.path.join(LOG_DIRECTORY, filename)
 
         # Logger setup

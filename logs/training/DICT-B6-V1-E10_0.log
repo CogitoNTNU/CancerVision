@@ -33,3 +33,16 @@ Epochs                 : 10
  - Average Loss: 0.6035221173885691
 [Epoch 8 metrics]
  - Average Loss: 0.5914038689328872
+[Epoch 8 validation results]
+ - Current Mean Dice: 0.0722970962524414
+ - Best Mean Dice: 0.0722970962524414
+ - Best Mean Dice Epoch: 8
+[Epoch 9 metrics]
+ - Average Loss: 0.5909495234197976
+[Epoch 10 metrics]
+ - Average Loss: 0.5889033303575586
+[Epoch 10 validation results]
+ - Current Mean Dice: 0.07394590973854065
+ - Best Mean Dice: 0.07394590973854065
+ - Best Mean Dice Epoch: 10
+Training completed. Best metric: 0.0739 at epoch: 10

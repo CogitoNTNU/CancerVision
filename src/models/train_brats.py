@@ -14,6 +14,7 @@ import sys
 import time
 
 import torch
+import wandb
 from sklearn.model_selection import train_test_split
 
 from monai.config import print_config
@@ -230,6 +231,22 @@ def main():
     args = parse_args()
     print_config()
 
+    # W&B experiment tracking
+    wandb.init(
+        project="cancervision",
+        config={
+            "max_epochs": args.max_epochs,
+            "batch_size": args.batch_size,
+            "lr": args.lr,
+            "weight_decay": args.weight_decay,
+            "val_interval": args.val_interval,
+            "seed": args.seed,
+            "roi_size": args.roi_size,
+            "num_samples": args.num_samples,
+            "test_size": args.test_size,
+        },
+    )
+
     # Reproducibility
     set_determinism(seed=args.seed)
 
@@ -362,7 +379,16 @@ def main():
         lr_scheduler.step()
         epoch_loss /= max(step, 1)
         epoch_loss_values.append(epoch_loss)
-        print(f"  avg loss: {epoch_loss:.4f}  lr: {lr_scheduler.get_last_lr()[0]:.2e}")
+        current_lr = lr_scheduler.get_last_lr()[0]
+        print(f"  avg loss: {epoch_loss:.4f}  lr: {current_lr:.2e}")
+
+        wandb.log(
+            {
+                "train/loss": epoch_loss,
+                "train/lr": current_lr,
+                "epoch": epoch + 1,
+            }
+        )
 
         # ---- validate ----
         if (epoch + 1) % args.val_interval == 0:
@@ -403,6 +429,17 @@ def main():
                     torch.save(model.state_dict(), ckpt_path)
                     print(f"  -> saved new best model to {ckpt_path}")
 
+                wandb.log(
+                    {
+                        "val/dice_mean": metric,
+                        "val/dice_tc": metric_tc,
+                        "val/dice_wt": metric_wt,
+                        "val/dice_et": metric_et,
+                        "val/best_dice": best_metric,
+                        "epoch": epoch + 1,
+                    }
+                )
+
                 print(
                     f"  val dice: {metric:.4f}"
                     f"  (TC={metric_tc:.4f}  WT={metric_wt:.4f}  ET={metric_et:.4f})"
@@ -426,6 +463,8 @@ def main():
     print(f"  Total time     : {total_time:.1f}s ({total_time / 3600:.2f}h)")
     print(f"  Checkpoint     : {os.path.join(save_dir, 'best_metric_model.pth')}")
     print("=" * 60)
+
+    wandb.finish()
 
 
 if __name__ == "__main__":

@@ -117,7 +117,7 @@ def main(datadir: pathlib.Path):
     # * Training
     # Hyperparameters
     TRAINING_BATCH_SIZE     = 6
-    VALIDATION_BATCH_SIZE   = 2
+    VALIDATION_BATCH_SIZE   = 1
     EPOCHS                  = 10
 
     # Logger

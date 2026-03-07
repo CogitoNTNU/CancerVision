@@ -1,14 +1,14 @@
 #!/bin/sh
 #SBATCH --account=studiegrupper-cogito
 #SBATCH --job-name="DQN_training"
-#SBATCH --time=00:30:00
+#SBATCH --time=00:00:05
 #SBATCH --partition=GPUQ
 #SBATCH --gres=gpu:v100:1
 #SBATCH --mem=32GB
 #SBATCH --nodes=1
 #SBATCH --output=slurm_outputs/output_combined.txt
 #SBATCH --error=slurm_outputs/output_combined.err
-#SBATCH --mail-user=ludvigho@ntnu.no
+#SBATCH --mail-user=eldarja@ntnu.no
 #SBATCH --mail-type=ALL
 
 WORKDIR=${SLURM_SUBMIT_DIR}

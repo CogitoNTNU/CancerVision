@@ -9,8 +9,19 @@ from torch.utils.tensorboard import SummaryWriter
 import monai
 from monai.data import ImageDataset, DataLoader
 from monai.transforms import EnsureChannelFirst, Compose, RandRotate90, Resize, ScaleIntensity
-
+from dotenv import load_dotenv
+import wandb
 path = os.path.join(os.path.dirname(__file__), "res/dataset/IXI-T1/")
+
+
+load_dotenv()  # loads .env from project root
+
+WANDB_API_KEY = os.getenv("WANDB_API_KEY")
+if not WANDB_API_KEY:
+    raise RuntimeError("WANDB_API_KEY missing in .env")
+
+wandb.login(key=WANDB_API_KEY)
+
 
 def main():
     device = torch.device(
@@ -86,7 +97,7 @@ def main():
     val_loader = DataLoader(val_ds, batch_size=2, num_workers=4, pin_memory=pin_memory)
 
 
-    model = monai.networks.nets.DenseNet121(spatial_dims=3, in_channels=1, out_channels=2).to(device)¨
+    model = monai.networks.nets.DenseNet121(spatial_dims=3, in_channels=1, out_channels=2).to(device)
     loss_function = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
@@ -95,6 +106,8 @@ def main():
     epochs_loss_values = list()
     metric_values = list()
     writer = SummaryWriter()
+    wandb.init(project="cancervision", entity="cancervision", name="classification_1")
+
     for epoch in range(5):
         print("-" * 10)
         print(f"epoch {epoch + 1}/{5}")
@@ -111,7 +124,8 @@ def main():
             optimizer.step()
             epoch_loss += loss.item()
             epoch_len = len(train_ds) // train_loader.batch_size
-            writer.add_scalar("train_loss", loss.item(), epoch_len * epoch + step)
+            wandb.log({"train_loss": loss.item(), "epoch": epoch + 1, "step": step})
+            print(f"{step}/{epoch_len}, train_loss: {loss.item():.4f
 
         epoch_loss /= step
         epochs_loss_values.append(epoch_loss)

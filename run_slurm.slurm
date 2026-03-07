@@ -26,15 +26,26 @@ SYNC_ON_RUN=false
 
 ENV_PATH="/cluster/work/$(whoami)/CancerVision"
 
-# Create repository if it doesn't exist
-# if [ ! -d "${ENV_PATH}" ]; then
-#     echo "Cloning project from GitHub..."
-#     git clone -b $BRANCH https://github.com/CogitoNTNU/CancerVision.git
-#     CLONED=true
-# fi
+# ? We need to have cloned the repository at least once to be able to run
+# ? this file, so this doesn't make sense to have in the slurm script. 
+# // Create repository if it doesn't exist
+# // if [ ! -d "${ENV_PATH}" ]; then
+# //     echo "Cloning project from GitHub..."
+# //     git clone -b $BRANCH https://github.com/CogitoNTNU/CancerVision.git
+# //     CLONED=true
+# // fi
 
-# Change to project directory
-# cd "CancerVision"
+# // Change to project directory
+# // cd "CancerVision"
+
+# Switch to the correct branch if not already on it
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$current_branch" != "$BRANCH" ]; then
+    echo "Switching to branch $BRANCH..."
+    git checkout $BRANCH
+else 
+    echo "Already on branch $BRANCH"
+fi
 
 # Pull latest changes if PULL_ON_RUN is true and CLONED is not true (to avoid pulling immediately after cloning)
 if [ "$PULL_ON_RUN" = true ] && [ "${CLONED:-false}" != true ]; then

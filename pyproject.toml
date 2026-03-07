@@ -15,6 +15,7 @@ dependencies = [
     "tqdm>=4.67.3",
     "nibabel>=5.4.0",
     "ignite>=1.1.0",
+    "weave>=0.52.30",
 ]
 
 [tool.uv.sources]

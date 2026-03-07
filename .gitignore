@@ -254,7 +254,8 @@ lerna-debug.log
 Thumbs.db
 
 # Training dataset
-res/HNTSMRG24_train/
+res/dataset/*
 
 # Testing
 src/test.py
+

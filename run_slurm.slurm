@@ -48,12 +48,12 @@ if [ "$PULL_ON_RUN" = true ]; then
     echo "Fetching latest changes from GitHub..."
     git fetch origin $BRANCH
     git reset --hard origin/$BRANCH
-    # // git reset --hard HEAD
-    # // git pull origin $BRANCH
+
+    # Elevate perms of new run file
+    chmod +x run_slurm.slurm
 fi
 
-# Elevate perms of new run file
-chmod +x run_slurm.slurm
+
 
 # # Load required modules
 # module purge

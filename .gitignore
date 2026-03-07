@@ -254,7 +254,9 @@ lerna-debug.log
 Thumbs.db
 
 # Training dataset
+res/dataset/*
 res/data/*
 
 # Testing
 src/test.py
+

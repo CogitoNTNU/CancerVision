@@ -37,7 +37,7 @@ echo "${ENV_PATH}"
 # //     CLONED=true
 # // fi
 
-Change to project directory
+# Change to project directory
 cd "CancerVision"
 
 # Switch to the correct branch if not already on it

@@ -1,7 +1,6 @@
 import os
 
 
-
 class Cache:
     # Static variables
     __data = {}
@@ -14,6 +13,7 @@ class Cache:
     @classmethod
     def enter(cls: 'Cache', cacheKey: tuple, value: str) -> None: 
         cls.__data[cacheKey] = value
+
 
 @staticmethod
 def id(

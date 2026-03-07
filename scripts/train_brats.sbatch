@@ -1,5 +1,5 @@
 #!/bin/sh
-#SBATCH --account=studiegrupper-cogito
+#SBATCH --account=ie-idi
 #SBATCH --job-name="DQN_training"
 #SBATCH --time=00:30:00
 #SBATCH --partition=GPUQ

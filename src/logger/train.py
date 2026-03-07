@@ -78,8 +78,8 @@ class TrainingLogger:
             self.logger.info(f"{key.replace('_', ' ').title():<23}: {value}")
 
         # Log a separator line
-        # self.logger.info(f"\n\n{'-' * 40}")
-        self.logger.info("\n\n")
+        self.logger.info(f"\n\n{'-' * 20}")
+        # self.logger.info("\n\n")
 
 
     def log(self, message: str):

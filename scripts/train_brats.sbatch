@@ -1,6 +1,6 @@
 #!/bin/sh
 #SBATCH --account=ie-idi
-#SBATCH --job-name="DQN_training"
+#SBATCH --job-name="Cancervision UNet 3D"
 #SBATCH --time=00:30:00
 #SBATCH --partition=GPUQ
 #SBATCH --gres=gpu:v100:1
@@ -50,9 +50,6 @@ fi
 export PYTHONPATH="${WORKDIR}:${PYTHONPATH}"
 echo "PYTHONPATH set to: ${PYTHONPATH}"
 
-# Enable headless rendering for MuJoCo (EGL backend)
-export MUJOCO_GL=egl
-export PYOPENGL_PLATFORM=egl
 
 # Install/update dependencies
 echo "Installing/updating dependencies..."

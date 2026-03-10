@@ -125,7 +125,8 @@ def parse_args():
                 "..",
                 "res",
                 "data",
-                "archive",
+                "dataset",
+                # "archive",
                 "BraTS2020_TrainingData",
                 "MICCAI_BraTS2020_TrainingData",
             )

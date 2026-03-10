@@ -11,54 +11,39 @@
 #SBATCH --mail-user=eldarja@ntnu.no
 #SBATCH --mail-type=ALL
 
-WORKDIR=${SLURM_SUBMIT_DIR}
-cd ${WORKDIR}
-echo "Running from this directory: $SLURM_SUBMIT_DIR"
-echo "Name of job: $SLURM_JOB_NAME"
-echo "ID of job: $SLURM_JOB_ID"
-echo "The job was run on these nodes: $SLURM_JOB_NODELIST"
+set -euo pipefail
 
+WORKDIR="${SLURM_SUBMIT_DIR}"
+PROJECT_DIR="${WORKDIR}/CancerVision"
 
-# CONFIG
 BRANCH="3d-segmentation"
 PULL_ON_RUN=true
-SYNC_ON_RUN=false
 
-ENV_PATH="/cluster/home/$(whoami)/CancerVision"
+echo "Running from: ${WORKDIR}"
+echo "Job name: ${SLURM_JOB_NAME}"
+echo "Job id: ${SLURM_JOB_ID}"
+echo "Nodes: ${SLURM_JOB_NODELIST}"
 
+cd "${PROJECT_DIR}"
 
-# TODO: Add wrapper script to chmod +x and run this script with a single command, e.g. `./run_slurm.sh`
-
-# Change to project directory
-cd "CancerVision"
-
-
-
-# #Switch to the correct branch if not already on it
-# currentBranch=$(git rev-parse --abbrev-ref HEAD)
-# if [ "$currentBranch" != "$BRANCH" ]; then
-#     echo "Switching to branch $BRANCH..."
-#     git checkout $BRANCH
-# else 
-#     echo "Already on branch $BRANCH"
-# fi
-
-
-# Pull latest changes if PULL_ON_RUN is true
-if [ "$PULL_ON_RUN" = true ]; then
-    echo "Fetching latest changes from GitHub..."
-    git fetch origin $BRANCH
-    git reset --hard origin/$BRANCH
-    # Elevate perms of new run file
-    chmod +x run_slurm.slurm
+if [ "${PULL_ON_RUN}" = true ]; then
+  git fetch origin "${BRANCH}"
+  git reset --hard "origin/${BRANCH}"
+  chmod +x run_slurm.slurm
 fi
+
+# Cluster GPU runtime
 module purge
 module load CUDA/12.4.0
 module load cuDNN/9.1.0-CUDA-12.4.0
 
+export PATH="$HOME/.local/bin:$PATH"
 uv --version
+
+# Reproducible env from lock
 uv sync --frozen
 
+# Add uv-managed NVIDIA libs to linker path
 SITE_PACKAGES="$(uv run python -c 'import site; print(site.getsitepackages()[0])')"
 for d in \
   "$SITE_PACKAGES/nvidia/cudnn/lib" \
@@ -67,39 +52,39 @@ for d in \
   "$SITE_PACKAGES/nvidia/cusparse/lib" \
   "$SITE_PACKAGES/nvidia/cufft/lib" \
   "$SITE_PACKAGES/nvidia/curand/lib" \
-  "$SITE_PACKAGES/nvidia/nccl/lib"; do
-  [ -d "$d" ] && export LD_LIBRARY_PATH="$d:${LD_LIBRARY_PATH}"
+  "$SITE_PACKAGES/nvidia/nccl/lib"
+do
+  [ -d "$d" ] && export LD_LIBRARY_PATH="$d:${LD_LIBRARY_PATH:-}"
 done
+
+# Also add module-provided libs (if defined)
+[ -n "${EBROOTCUDNN:-}" ] && export LD_LIBRARY_PATH="${EBROOTCUDNN}/lib64:${LD_LIBRARY_PATH:-}"
+[ -n "${EBROOTCUDA:-}" ] && export LD_LIBRARY_PATH="${EBROOTCUDA}/lib64:${LD_LIBRARY_PATH:-}"
+
 echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
 
-# Load environment variables from .env file (ignore comments and empty lines)
-if [ -f "${WORKDIR}/.env" ]; then
-    echo "Loading environment variables from .env..."
-    set -a  # Automatically export all variables
-    source <(grep -v '^#' ${WORKDIR}/.env | grep -v '^$')
-    set +a
-else
-    echo "Warning: .env file not found. W&B logging may not work."
+# Hard fail early if libcudnn.so.9 still missing
+if ! ldconfig -p 2>/dev/null | grep -q "libcudnn.so.9"; then
+  if ! find "${PROJECT_DIR}/.venv" -name "libcudnn.so.9*" | grep -q .; then
+    echo "ERROR: libcudnn.so.9 not found in linker cache or .venv."
+    echo "Check that torch CUDA deps are installed in uv.lock."
+    exit 1
+  fi
 fi
 
-# Add project root to Python path so 'src' can be found as a module
-echo "PYTHONPATH set to: ${PYTHONPATH}"
+if [ -f "${WORKDIR}/.env" ]; then
+  set -a
+  source <(grep -v '^#' "${WORKDIR}/.env" | grep -v '^$')
+  set +a
+fi
 
-# Check GPU info
-echo "================================================"
-echo "GPU Information:"
+export PYTHONPATH="${WORKDIR}:${PYTHONPATH:-}"
+
 echo "================================================"
 nvidia-smi
-echo ""
-echo "PyTorch CUDA availability:"
-uv run python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
 echo "================================================"
-echo ""
+uv run python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'}')"
 
-# Run the training script
-uv run main.py
-
-# Deactivate the environment
-conda deactivate
+uv run python main.py
 
 echo "Job finished"

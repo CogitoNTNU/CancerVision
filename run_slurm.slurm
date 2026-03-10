@@ -52,7 +52,7 @@ if [ "$PULL_ON_RUN" = true ]; then
     chmod +x run_slurm.slurm
 fi
 
-
+uv sync
 
 # Load environment variables from .env file (ignore comments and empty lines)
 if [ -f "${WORKDIR}/.env" ]; then
@@ -66,9 +66,6 @@ fi
 
 # Add project root to Python path so 'src' can be found as a module
 echo "PYTHONPATH set to: ${PYTHONPATH}"
-
-echo "Installed packages:"
-pip freeze
 
 # Check GPU info
 echo "================================================"

@@ -59,16 +59,18 @@ fi
 module purge
 module load Anaconda3/2024.02-1
 
-# Create conda environment only if it doesn't exist
+# make conda activate available in batch shell
+source "$(conda info --base)/etc/profile.d/conda.sh"
+
 if [ ! -d "${ENV_PATH}" ]; then
     echo "Creating new conda environment..."
-    conda create -y --prefix ${ENV_PATH} python=3.13.0
+    conda create -y --prefix "${ENV_PATH}" python=3.13
 else
     echo "Conda environment already exists, skipping creation."
 fi
 
-# Activate the environment
-source activate ${ENV_PATH}
+conda activate "${ENV_PATH}"
+python --version
 
 # Load environment variables from .env file (ignore comments and empty lines)
 if [ -f "${WORKDIR}/.env" ]; then
@@ -87,7 +89,9 @@ echo "PYTHONPATH set to: ${PYTHONPATH}"
 
 # Install/update dependencies
 echo "Installing/updating dependencies..."
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+
 
 echo "Installed packages:"
 pip freeze

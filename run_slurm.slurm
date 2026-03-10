@@ -48,29 +48,11 @@ if [ "$PULL_ON_RUN" = true ]; then
     echo "Fetching latest changes from GitHub..."
     git fetch origin $BRANCH
     git reset --hard origin/$BRANCH
-
     # Elevate perms of new run file
     chmod +x run_slurm.slurm
 fi
 
 
-
-# Load required modules
-module purge
-module load Anaconda3/2024.02-1
-
-# make conda activate available in batch shell
-source "$(conda info --base)/etc/profile.d/conda.sh"
-
-if [ ! -d "${ENV_PATH}" ]; then
-    echo "Creating new conda environment..."
-    conda create -y --prefix "${ENV_PATH}" python=3.13
-else
-    echo "Conda environment already exists, skipping creation."
-fi
-
-conda activate "${ENV_PATH}"
-python --version
 
 # Load environment variables from .env file (ignore comments and empty lines)
 if [ -f "${WORKDIR}/.env" ]; then
@@ -83,15 +65,7 @@ else
 fi
 
 # Add project root to Python path so 'src' can be found as a module
-export PYTHONPATH="${WORKDIR}:${PYTHONPATH}"
 echo "PYTHONPATH set to: ${PYTHONPATH}"
-
-
-# Install/update dependencies
-echo "Installing/updating dependencies..."
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-
 
 echo "Installed packages:"
 pip freeze
@@ -103,12 +77,12 @@ echo "================================================"
 nvidia-smi
 echo ""
 echo "PyTorch CUDA availability:"
-python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
+uv run python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
 echo "================================================"
 echo ""
 
 # Run the training script
-python main.py
+uv run main.py
 
 # Deactivate the environment
 conda deactivate

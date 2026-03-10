@@ -16,7 +16,6 @@ dependencies = [
     "nibabel>=5.4.0",
     "ignite>=1.1.0",
     "weave>=0.52.30",
-    "wandb"
 ]
 
 [tool.uv.sources]

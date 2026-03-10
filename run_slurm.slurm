@@ -33,6 +33,7 @@ ENV_PATH="/cluster/home/$(whoami)/CancerVision"
 cd "CancerVision"
 
 
+
 # #Switch to the correct branch if not already on it
 # currentBranch=$(git rev-parse --abbrev-ref HEAD)
 # if [ "$currentBranch" != "$BRANCH" ]; then
@@ -51,8 +52,25 @@ if [ "$PULL_ON_RUN" = true ]; then
     # Elevate perms of new run file
     chmod +x run_slurm.slurm
 fi
+module purge
+module load CUDA/12.4.0
+module load cuDNN/9.1.0-CUDA-12.4.0
 
-uv sync
+uv --version
+uv sync --frozen
+
+SITE_PACKAGES="$(uv run python -c 'import site; print(site.getsitepackages()[0])')"
+for d in \
+  "$SITE_PACKAGES/nvidia/cudnn/lib" \
+  "$SITE_PACKAGES/nvidia/cublas/lib" \
+  "$SITE_PACKAGES/nvidia/cuda_runtime/lib" \
+  "$SITE_PACKAGES/nvidia/cusparse/lib" \
+  "$SITE_PACKAGES/nvidia/cufft/lib" \
+  "$SITE_PACKAGES/nvidia/curand/lib" \
+  "$SITE_PACKAGES/nvidia/nccl/lib"; do
+  [ -d "$d" ] && export LD_LIBRARY_PATH="$d:${LD_LIBRARY_PATH}"
+done
+echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
 
 # Load environment variables from .env file (ignore comments and empty lines)
 if [ -f "${WORKDIR}/.env" ]; then

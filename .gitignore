@@ -263,3 +263,4 @@ best_metric_model_segmentation2d_dict.pth
 
 # Testing
 src/test.py
+test.sh

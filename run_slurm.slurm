@@ -20,14 +20,60 @@ echo "The job was run on these nodes: $SLURM_JOB_NODELIST"
 
 
 # CONFIG
-BRANCH="2d-segmentation"
-PULL_ON_RUN=true
+BRANCH="main"                                                                           # Default to `main` branch
+PULL_ON_RUN=true 
 SYNC_ON_RUN=false
+
+
+usage() {
+    echo "Usage: $0 [--branch=<name>] [--pull=true|false] [--sync=true|false]" >&2
+    exit 1
+}
+
+# Parse flags
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --branch=*)
+        BRANCH="${1#*=}"
+        ;;
+        --pull=*)
+        PULL_ON_RUN="${1#*=}"
+        ;;
+        --sync=*)
+        SYNC_ON_RUN="${1#*=}"
+        ;;
+        --help|-h)
+        usage
+        ;;
+        *)
+        echo "Unknown argument: $1" >&2
+        usage
+        ;;
+    esac
+    shift
+done
+
+
+# Validate booleans
+case "$PULL_ON_RUN" in
+    true|false) ;;
+    *) echo "Error: --pull must be true or false" >&2; exit 1 ;;
+esac
+
+case "$SYNC_ON_RUN" in
+    true|false) ;;
+    *) echo "Error: --sync must be true or false" >&2; exit 1 ;;
+esac
+
+
+echo "CONFIGURATION:"
+echo "BRANCH=$BRANCH"
+echo "PULL_ON_RUN=$PULL_ON_RUN"
+echo "SYNC_ON_RUN=$SYNC_ON_RUN"
+
 
 ENV_PATH="/cluster/home/$(whoami)/CancerVision"
 
-
-# TODO: Add wrapper script to chmod +x and run this script with a single command, e.g. `./run_slurm.sh`
 
 # Change to project directory
 cd "CancerVision"

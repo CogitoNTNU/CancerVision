@@ -152,7 +152,7 @@ echo "================================================"
 echo ""
 
 # Run the training script
-python main.py
+python src/unet_training_dict.py
 
 # ? # Deactivate the environment
 # ? conda deactivate

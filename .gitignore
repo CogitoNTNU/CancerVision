@@ -254,4 +254,4 @@ lerna-debug.log
 Thumbs.db
 
 # Training dataset
-res/HNTSMRG24_train/
+res/HNTSMRG24_train/node_modules/

@@ -1,7 +1,11 @@
+
+
 import torch
 
+
 def main():
-    # Check if CUDA is available
+    # Probe CUDA with a tiny operation because availability alone can be misleading
+    # on nodes where device architecture is unsupported by the installed torch build.
     if torch.cuda.is_available():
         print("CUDA is available. Using GPU.")
         device = torch.device("cuda")
@@ -16,5 +20,9 @@ def main():
 
     print("Result of tensor addition:", c)
     print("Device used for computation:", c.device)
+    # write to stdout and stderr
+
+
+
 if __name__ == "__main__":
     main()  

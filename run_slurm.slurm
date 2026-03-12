@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --account=studiegrupper-cogito
 #SBATCH --job-name="Cancer Vision UNet 2D"
-#SBATCH --time=00:00:05
+#SBATCH --time=00:01:00
 #SBATCH --partition=GPUQ
 #SBATCH --gres=gpu:v100:1
 #SBATCH --mem=32GB
@@ -18,10 +18,12 @@ echo "Name of job: $SLURM_JOB_NAME"
 echo "ID of job: $SLURM_JOB_ID"
 echo "The job was run on these nodes: $SLURM_JOB_NODELIST"
 
+# Use current directory as fallback if not running via sbatch
+SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-.}
 
 # CONFIG
 BRANCH="main"                                                                           # Default to `main` branch
-PULL_ON_RUN=true 
+PULL_ON_RUN=false 
 SYNC_ON_RUN=false
 
 
@@ -152,7 +154,7 @@ echo "================================================"
 echo ""
 
 # Run the training script
-python src/unet_training_dict.py
+python main.py
 
 # ? # Deactivate the environment
 # ? conda deactivate

@@ -220,6 +220,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+!logs/
+!logs/training/
+!logs/training/*.log
 
 # Dependency directories
 node_modules/
@@ -253,8 +256,12 @@ lerna-debug.log
 .DS_Store
 Thumbs.db
 
-# Training dataset
-res/HNTSMRG24_train/
-
-# Testing dataset
+# Training
 res/dataset/*
+runs/**
+best_metric_model_segmentation2d_dict.pth
+
+# Testing
+src/test.pyres/data/archive
+res/data/
+frontend/node_modules/

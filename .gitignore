@@ -264,3 +264,4 @@ best_metric_model_segmentation2d_dict.pth
 # Testing
 src/test.pyres/data/archive
 res/data/
+frontend/node_modules/

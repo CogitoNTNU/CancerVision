@@ -104,6 +104,8 @@ fi
 
 # Load required modules
 module purge
+module load uv/0.2.30-GCCcore-13.3.0
+
 # ? module load Anaconda3/2024.02-1
 
 # ? # Create conda environment only if it doesn't exist
@@ -142,6 +144,9 @@ module purge
 # ? echo "Installed packages:"
 # ? pip freeze
 
+uv sync
+
+
 # Check GPU info
 echo "================================================"
 echo "GPU Information:"
@@ -149,12 +154,13 @@ echo "================================================"
 nvidia-smi
 echo ""
 echo "PyTorch CUDA availability:"
-python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
+
+# python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
 echo "================================================"
 echo ""
 
 # Run the training script
-python main.py
+uv run main.py
 
 # ? # Deactivate the environment
 # ? conda deactivate

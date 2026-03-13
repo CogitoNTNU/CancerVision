@@ -3,8 +3,8 @@
 #SBATCH --job-name="Cancer Vision UNet 2D"
 #SBATCH --time=00:01:00
 #SBATCH --partition=GPUQ
-#SBATCH --gres=gpu:v100:1
-#SBATCH --mem=32GB
+#SBATCH --gres=gpu:p100:1
+#SBATCH --mem=5G
 #SBATCH --nodes=1
 #SBATCH --output=slurm_outputs/output_combined.txt
 #SBATCH --error=slurm_outputs/output_combined.err

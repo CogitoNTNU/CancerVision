@@ -105,7 +105,7 @@ fi
 # Load required modules
 module purge
 module load cuDNN/9.5.0.50-CUDA-12.6.0
-module load cuda/12.9.1
+module load CUDA/12.9.1
 
 nvidia-smi
 

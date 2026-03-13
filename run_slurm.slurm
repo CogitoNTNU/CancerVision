@@ -104,48 +104,12 @@ fi
 
 # Load required modules
 module purge
+module load cuDNN/9.5.0.50-CUDA-12.6.0
+module load cuda/12.9.1
+
+nvidia-smi
 
 uv version
-
-uv sync
-
-# ? module load Anaconda3/2024.02-1
-
-# ? # Create conda environment only if it doesn't exist
-# ? if [ ! -d "${ENV_PATH}" ]; then
-# ?     echo "Creating new conda environment..."
-# ?     conda create -y --prefix ${ENV_PATH} python=3.11
-# ? else
-# ?     echo "Conda environment already exists, skipping creation."
-# ? fi
-
-# ? # Activate the environment
-# ? source activate ${ENV_PATH}
-
-# ? # Load environment variables from .env file (ignore comments and empty lines)
-# ? if [ -f "${WORKDIR}/.env" ]; then
-# ?     echo "Loading environment variables from .env..."
-# ?     set -a  # Automatically export all variables
-# ?     source <(grep -v '^#' ${WORKDIR}/.env | grep -v '^$')
-# ?     set +a
-# ? else
-# ?     echo "Warning: .env file not found. W&B logging may not work."
-# ? fi
-
-# ? # Add project root to Python path so 'src' can be found as a module
-# ? export PYTHONPATH="${WORKDIR}:${PYTHONPATH}"
-# ? echo "PYTHONPATH set to: ${PYTHONPATH}"
-
-# ? # Enable headless rendering for MuJoCo (EGL backend)
-# ? export MUJOCO_GL=egl
-# ? export PYOPENGL_PLATFORM=egl
-
-# ? # Install/update dependencies
-# ? echo "Installing/updating dependencies..."
-# ? pip install -r requirements.txt
-
-# ? echo "Installed packages:"
-# ? pip freeze
 
 uv sync
 

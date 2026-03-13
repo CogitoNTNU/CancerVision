@@ -104,7 +104,10 @@ fi
 
 # Load required modules
 module purge
-module load uv/0.2.30-GCCcore-13.3.0
+
+uv version
+
+uv sync
 
 # ? module load Anaconda3/2024.02-1
 

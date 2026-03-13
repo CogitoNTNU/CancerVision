@@ -104,7 +104,6 @@ fi
 
 # Load required modules
 module purge
-module python/3.13.5
 
 nvidia-smi
 

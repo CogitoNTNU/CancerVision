@@ -1,11 +1,7 @@
-import sys
+
 
 import torch
 
-# if slurm output files exist, print their contents
-
-stdout_file="slurm_outputs/output_combined.txt"
-stderr_file="slurm_outputs/output_combined.err"
 
 def main():
     # Probe CUDA with a tiny operation because availability alone can be misleading
@@ -25,8 +21,7 @@ def main():
     print("Result of tensor addition:", c)
     print("Device used for computation:", c.device)
     # write to stdout and stderr
-    print("This is a message to stdout.")
-    print("This is a message to stderr.", file=sys.stderr)
+
 
 
 if __name__ == "__main__":

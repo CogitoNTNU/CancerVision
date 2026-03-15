@@ -17,22 +17,22 @@ dependencies = [
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },
-  { index = "pytorch-cu129", marker = "sys_platform == 'linux'" },
-  { index = "pytorch-cu129", marker = "sys_platform == 'win32'" }
+  { index = "pytorch-linux", marker = "sys_platform == 'linux'" },
+  { index = "pytorch-win", marker = "sys_platform == 'win32'" }
 ]
 torchvision = [
   { index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },
-  { index = "pytorch-cu129", marker = "sys_platform == 'linux'" },
-  { index = "pytorch-cu129", marker = "sys_platform == 'win32'" }
+  { index = "pytorch-linux", marker = "sys_platform == 'linux'" },
+  { index = "pytorch-win", marker = "sys_platform == 'win32'" }
 ]
 
 [[tool.uv.index]]
-name = "pytorch-cu126"
-url = "https://download.pytorch.org/whl/cu129"
+name = "pytorch-win"
+url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cu129"
+name = "pytorch-linux"
 url = "https://download.pytorch.org/whl/cu129"
 explicit = true
 

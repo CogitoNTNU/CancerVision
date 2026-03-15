@@ -26,7 +26,9 @@ module purge
 
 #login to wandb
 #your wandb key in .env should be in the format: WANDB__API_KEY=your_key_here
-set -a; . .env; set +a
+set -a
+source /cluster/home/eldarja/CancerVision/.env
+set +a
 uv sync
 # Login to wandb
 uv run wandb login --key "$WANDB_API_KEY" --relogin

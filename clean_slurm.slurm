@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --account=studiegrupper-cogito
 #SBATCH --job-name="Cancer Vision UNet 2D"
-#SBATCH --time=00:01:00
+#SBATCH --time=04:00:00
 #SBATCH --partition=GPUQ
 #SBATCH --gres=gpu:p100:1
 #SBATCH --mem=5G
@@ -23,12 +23,14 @@ SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-.}
 
 # Load required modules
 module purge
-module load python/3.13.5
+# module load python/3.13.5
 
-pip install uv
-
+# pip install uv
+uv --version
+uv_verison =uv --version
+echo "uv version: $uv_verison"
 uv sync
-
+echo "Synced with remote repository"
 #login to wandb
 uv run wandb login --relogin
 

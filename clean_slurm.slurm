@@ -26,6 +26,13 @@ module purge
 
 #login to wandb
 #your wandb key in .env should be in the format: WANDB__API_KEY=your_key_here
+ENV_FILE=/cluster/home/eldarja/CancerVision/.env
+
+if [ ! -f "$ENV_FILE" ]; then
+    echo "Missing .env file: $ENV_FILE"
+    exit 1
+fi
+
 set -a
 source /cluster/home/eldarja/CancerVision/.env
 set +a

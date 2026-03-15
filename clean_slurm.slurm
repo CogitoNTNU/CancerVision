@@ -23,15 +23,13 @@ SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-.}
 
 # Load required modules
 module purge
-# pip install uv
-uv sync
-
 
 #login to wandb
 #your wandb key in .env should be in the format: WANDB__API_KEY=your_key_here
 set -a; source .env; set +a
-
-uv run wandb login --key $WANDB__API_KEY --relogin 
+uv sync
+# Login to wandb
+uv run wandb login --key "$WANDB_API_KEY" --relogin
 
 # Run the training script
 uv run main.py

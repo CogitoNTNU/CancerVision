@@ -34,11 +34,11 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 set -a
-source /cluster/home/eldarja/CancerVision/.env
+source "$ENV_FILE"
 set +a
 uv sync
 # Login to wandb
-uv run wandb login --key "$WANDB_API_KEY" --relogin
+uv run wandb login $WANDB_API_KEY --relogin
 
 # Run the training script
 uv run main.py

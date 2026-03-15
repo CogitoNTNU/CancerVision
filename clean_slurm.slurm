@@ -1,13 +1,13 @@
 #!/bin/sh
 #SBATCH --account=studiegrupper-cogito
 #SBATCH --job-name="Cancer Vision UNet 2D"
-#SBATCH --time=04:00:00
+#SBATCH --time=00:15:00
 #SBATCH --partition=GPUQ
-#SBATCH --gres=gpu:p100:1
+#SBATCH --gres=gpu:v100:1
 #SBATCH --mem=5G
 #SBATCH --nodes=1
-#SBATCH --output=slurm_outputs/output_combined.txt
-#SBATCH --error=slurm_outputs/output_combined.err
+#SBATCH --output=test-srun.out
+#SBATCH --error=test-srun.err
 #SBATCH --mail-user=eldarja@ntnu.no
 #SBATCH --mail-type=ALL
 
@@ -27,18 +27,15 @@ module purge
 
 # pip install uv
 uv --version
-uv_verison =uv --version
-echo "uv version: $uv_verison"
+uv_version="$(uv --version)"
+echo "uv version: $uv_version"
 uv sync
-echo "Synced with remote repository"
+
 #login to wandb
 uv run wandb login --relogin
 
 # Run the training script
 uv run main.py
-
-stdout_file="slurm_outputs/output_combined.txt"
-stderr_file="slurm_outputs/output_combined.err"
 
 # Check if the output files exist and print their contents
 echo "Job finished"

@@ -23,10 +23,10 @@ SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-.}
 
 # Load required modules
 module purge
+module load python/3.13.5
 
-#sync uv environment
-#make sure uv is installed on your cluster
-# curl -LsSf https://astral.sh/uv/install.sh | sh
+pip install uv
+
 uv sync
 
 #login to wandb
@@ -35,4 +35,8 @@ uv run wandb login --relogin
 # Run the training script
 uv run main.py
 
+stdout_file="slurm_outputs/output_combined.txt"
+stderr_file="slurm_outputs/output_combined.err"
+
+# Check if the output files exist and print their contents
 echo "Job finished"

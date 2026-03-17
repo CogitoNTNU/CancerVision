@@ -1,10 +1,10 @@
 #!/bin/sh
 #SBATCH --account=studiegrupper-cogito
-#SBATCH --job-name="Cancer Vision UNet 2D"
-#SBATCH --time=00:15:00
+#SBATCH --job-name="Cancer Vision UNet 3D"
+#SBATCH --time=02:15:00
 #SBATCH --partition=GPUQ
 #SBATCH --gres=gpu:v100:1
-#SBATCH --mem=5G
+#SBATCH --mem=32G
 #SBATCH --nodes=1
 #SBATCH --output=test-srun.out
 #SBATCH --error=test-srun.err

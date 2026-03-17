@@ -11,6 +11,8 @@
 #SBATCH --mail-user=eldarja@ntnu.no
 #SBATCH --mail-type=ALL
 
+# p100 needs cuda 12.6 or lower
+
 WORKDIR=${SLURM_SUBMIT_DIR}
 cd ${WORKDIR}
 echo "Running from this directory: $SLURM_SUBMIT_DIR"
@@ -21,6 +23,7 @@ echo "The job was run on these nodes: $SLURM_JOB_NODELIST"
 # Use current directory as fallback if not running via sbatch
 SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-.}
 module purge
+
 
 #make sure uv is installed on your cluster
 # curl -LsSf https://astral.sh/uv/install.sh | sh

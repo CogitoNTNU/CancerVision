@@ -125,7 +125,7 @@ def main():
             epoch_loss += loss.item()
             epoch_len = len(train_ds) // train_loader.batch_size
             wandb.log({"train_loss": loss.item(), "epoch": epoch + 1, "step": step})
-            print(f"{step}/{epoch_len}, train_loss: {loss.item():.4f
+            print(f"{step}/{epoch_len}, train_loss: {loss.item():.4f)
 
         epoch_loss /= step
         epochs_loss_values.append(epoch_loss)

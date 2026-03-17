@@ -11,11 +11,21 @@
 #SBATCH --mail-user=eldarja@ntnu.no
 #SBATCH --mail-type=ALL
 
+<<<<<<< HEAD
 set -euo pipefail
+=======
+WORKDIR=${SLURM_SUBMIT_DIR}
+cd ${WORKDIR}
+echo "Running from this directory: $SLURM_SUBMIT_DIR"
+echo "Name of job: $SLURM_JOB_NAME" 
+echo "ID of job: $SLURM_JOB_ID"
+echo "The job was run on these nodes: $SLURM_JOB_NODELIST"
+>>>>>>> main
 
 WORKDIR="${SLURM_SUBMIT_DIR}"
 PROJECT_DIR="${WORKDIR}/CancerVision"
 
+<<<<<<< HEAD
 BRANCH="3d-segmentation"
 PULL_ON_RUN=true
 
@@ -23,6 +33,61 @@ echo "Running from: ${WORKDIR}"
 echo "Job name: ${SLURM_JOB_NAME}"
 echo "Job id: ${SLURM_JOB_ID}"
 echo "Nodes: ${SLURM_JOB_NODELIST}"
+=======
+# CONFIG
+BRANCH="main"                                                                           # Default to `main` branch
+PULL_ON_RUN=true 
+SYNC_ON_RUN=false
+
+
+usage() {
+    echo "Usage: $0 [--branch=<name>] [--pull=true|false] [--sync=true|false]" >&2
+    exit 1
+}
+
+# Parse flags
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --branch=*)
+        BRANCH="${1#*=}"
+        ;;
+        --pull=*)
+        PULL_ON_RUN="${1#*=}"
+        ;;
+        --sync=*)
+        SYNC_ON_RUN="${1#*=}"
+        ;;
+        --help|-h)
+        usage
+        ;;
+        *)
+        echo "Unknown argument: $1" >&2
+        usage
+        ;;
+    esac
+    shift
+done
+
+# Validate booleans
+case "$PULL_ON_RUN" in
+    true|false) ;;
+    *) echo "Error: --pull must be true or false" >&2; exit 1 ;;
+esac
+
+case "$SYNC_ON_RUN" in
+    true|false) ;;
+    *) echo "Error: --sync must be true or false" >&2; exit 1 ;;
+esac
+
+
+echo "CONFIGURATION:"
+echo "BRANCH=$BRANCH"
+echo "PULL_ON_RUN=$PULL_ON_RUN"
+echo "SYNC_ON_RUN=$SYNC_ON_RUN"
+
+
+ENV_PATH="/cluster/home/$(whoami)/CancerVision"
+>>>>>>> main
 
 cd "${PROJECT_DIR}"
 
@@ -78,12 +143,18 @@ if [ -f "${WORKDIR}/.env" ]; then
   set +a
 fi
 
+<<<<<<< HEAD
 export PYTHONPATH="${WORKDIR}:${PYTHONPATH:-}"
 
 echo "================================================"
 nvidia-smi
 echo "================================================"
 uv run python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'}')"
+=======
+# # Load required modules
+# module purge
+# module load Anaconda3/2024.02-1
+>>>>>>> main
 
 uv run python main.py
 

@@ -262,5 +262,3 @@ res/data/*
 
 # Testing
 src/test.py
-
-frontend/node_modules/

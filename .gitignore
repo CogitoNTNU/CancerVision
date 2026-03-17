@@ -258,3 +258,4 @@ res/HNTSMRG24_train/
 
 # Testing dataset
 res/dataset/*
+res/data/*

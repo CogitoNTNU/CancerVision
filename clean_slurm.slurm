@@ -28,4 +28,4 @@ module purge
 #make sure uv is installed on your cluster
 # curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
-uv run main.py
+uv run main.py --batch-size 32 --max-epochs 100 --num-workers 8

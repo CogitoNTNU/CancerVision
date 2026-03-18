@@ -46,6 +46,14 @@ if _src_dir not in sys.path:
 
 from datasets import ConvertToMultiChannelBasedOnBratsClassesd  # noqa: E402
 
+# ---------------------------------------------------------------------------
+# Load config from .env if available
+# ---------------------------------------------------------------------------
+from dotenv import load_dotenv
+load_dotenv()
+wandb_api_key = os.getenv("WANDB_API_KEY")
+if wandb_api_key is not None:
+    wandb.login(key=wandb_api_key)
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -55,6 +55,10 @@ wandb_api_key = os.getenv("WANDB_API_KEY")
 if wandb_api_key is not None:
     wandb.login(key=wandb_api_key)
 
+else:
+    wandb.offline = True
+    
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

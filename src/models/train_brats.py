@@ -240,15 +240,7 @@ def get_val_transforms():
 def main():
     args = parse_args()
     print_config()
-
-    print(f".env path      : {_dotenv_path}")
-    print(f".env exists    : {_dotenv_exists}")
-
-    # Auto-disable W&B in non-interactive environments when no API key is set.
-    effective_wandb_mode = wandb_mode or ("online" if wandb_api_key else "disabled")
-    if effective_wandb_mode == "disabled":
-        print("WANDB_API_KEY not found. Running with W&B disabled.")
-
+    
     # W&B experiment tracking
     wandb.init(
         project="cancervision",

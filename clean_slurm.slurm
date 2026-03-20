@@ -24,11 +24,11 @@ echo "The job was run on these nodes: $SLURM_JOB_NODELIST"
 SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-.}
 module purge
 
-set -a  # Automatically export all variables
-source <(grep -v '^#' ${WORKDIR}/.env | grep -v '^$')
-set +a
 
-#make sure uv is installed on your cluster
+#make sure uv is instal
+lset -a  # Automatically export all variables
+ ource <(grep -v '^#' ${WORKDIR}/.env | grep -v '^$')
+  t +aed on your cluster
 # curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 uv run main.py --batch-size 32 --max-epochs 100 --num-workers 8

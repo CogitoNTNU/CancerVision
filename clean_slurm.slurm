@@ -28,4 +28,4 @@ module purge
 #make sure uv is installed and available in the PATH. If not, install it using the following command:
 # curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
-uv run main.py --batch-size 32 --max-epochs 100 --num-workers 8
+uv run main.py --batch-size 32 --max-epochs 100 --num-workers 8 --data-dir /cluster/home/eldarja/CancerVision/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData

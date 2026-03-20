@@ -4,12 +4,14 @@
 #SBATCH --time=02:15:00
 #SBATCH --partition=GPUQ
 #SBATCH --gres=gpu:v100:1
-#SBATCH --mem=32G
-#SBATCH --nodes=1
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=2
+#SBATCH --mem=64G
 #SBATCH --output=srun.out
 #SBATCH --error=srun.err
 #SBATCH --mail-user=eldarja@ntnu.no
 #SBATCH --mail-type=ALL
+
 
 # p100 needs cuda 12.6 or lower
 
@@ -28,4 +30,4 @@ module purge
 #make sure uv is installed and available in the PATH. If not, install it using the following command:
 # curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
-uv run main.py --batch-size 32 --max-epochs 100 --num-workers 8 --data-dir /cluster/home/eldarja/CancerVision/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData
+uv run main.py --batch-size 32 --max-epochs 100 --num-workers 2 --data-dir /cluster/home/eldarja/CancerVision/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData

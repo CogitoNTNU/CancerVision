@@ -87,27 +87,6 @@ For example: OS version, programs, libraries, etc.
    uv run pre-commit install
    ```
 
-## Linux And HPC Notes
-
-If you run this project from a Linux shell or a SLURM job:
-
-- Activate the virtual environment with `source .venv/bin/activate`.
-- Do not run the Windows PowerShell command `& .venv\\Scripts\\Activate.ps1` from `bash`.
-- If a file was edited on Windows, normalize line endings before sourcing it in `bash`:
-  ```sh
-  sed -i 's/\r$//' .env *.slurm
-  ```
-- On GPU nodes, load CUDA and cuDNN modules before running `uv sync` or `uv run`:
-  ```sh
-  module purge
-  module load CUDA/12.4.0
-  module load cuDNN/9.1.0-CUDA-12.4.0
-  ```
-- Quick runtime check:
-  ```sh
-  uv run python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
-  ```
-
 ## Usage
 
 To run the project, run the following command from the root directory of the project:

@@ -13,15 +13,11 @@
 
 set -euo pipefail
 
-WORKDIR="${SLURM_SUBMIT_DIR:-$PWD}"
-PROJECT_DIR="${WORKDIR}"
-
-if [ ! -f "${PROJECT_DIR}/main.py" ] && [ -f "${WORKDIR}/CancerVision/main.py" ]; then
-  PROJECT_DIR="${WORKDIR}/CancerVision"
-fi
+WORKDIR="${SLURM_SUBMIT_DIR}"
+PROJECT_DIR="${WORKDIR}/CancerVision"
 
 BRANCH="3d-segmentation"
-PULL_ON_RUN=false
+PULL_ON_RUN=true
 
 echo "Running from: ${WORKDIR}"
 echo "Job name: ${SLURM_JOB_NAME}"
@@ -32,8 +28,7 @@ cd "${PROJECT_DIR}"
 
 if [ "${PULL_ON_RUN}" = true ]; then
   git fetch origin "${BRANCH}"
-  git checkout "${BRANCH}"
-  git pull --ff-only origin "${BRANCH}"
+  git reset --hard "origin/${BRANCH}"
   chmod +x run_slurm.slurm
 fi
 
@@ -45,8 +40,8 @@ module load cuDNN/9.1.0-CUDA-12.4.0
 export PATH="$HOME/.local/bin:$PATH"
 uv --version
 
-# Sync the environment for the current lock/pyproject state
-uv sync
+# Reproducible env from lock
+uv sync --frozen
 
 # Add uv-managed NVIDIA libs to linker path
 SITE_PACKAGES="$(uv run python -c 'import site; print(site.getsitepackages()[0])')"
@@ -77,18 +72,24 @@ if ! ldconfig -p 2>/dev/null | grep -q "libcudnn.so.9"; then
   fi
 fi
 
-if [ -f "${PROJECT_DIR}/.env" ]; then
+if [ -f "${WORKDIR}/.env" ]; then
   set -a
-  source <(sed 's/\r$//' "${PROJECT_DIR}/.env" | grep -v '^[[:space:]]*#' | grep -v '^[[:space:]]*$')
+  source <(grep -v '^#' "${WORKDIR}/.env" | grep -v '^$')
   set +a
 fi
 
-export PYTHONPATH="${PROJECT_DIR}:${PYTHONPATH:-}"
+<<<<<<< HEAD
+export PYTHONPATH="${WORKDIR}:${PYTHONPATH:-}"
 
 echo "================================================"
 nvidia-smi
 echo "================================================"
-uv run python -c "import os, torch; print('torch', torch.__version__); print('cuda build', torch.version.cuda); print('cuda available', torch.cuda.is_available()); print('device count', torch.cuda.device_count()); print('device name', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'); print('wandb key present', bool(os.getenv('WANDB_API_KEY')))"
+uv run python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'}')"
+=======
+# # Load required modules
+# module purge
+# module load Anaconda3/2024.02-1
+>>>>>>> main
 
 uv run python main.py
 

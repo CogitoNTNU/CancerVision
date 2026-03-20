@@ -51,28 +51,11 @@ from datasets import ConvertToMultiChannelBasedOnBratsClassesd  # noqa: E402
 # ---------------------------------------------------------------------------
 from dotenv import load_dotenv
 
-_project_root = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
-_dotenv_path = os.path.join(_project_root, ".env")
-_dotenv_exists = os.path.isfile(_dotenv_path)
-if _dotenv_exists:
-    load_dotenv(dotenv_path=_dotenv_path)
-else:
-    load_dotenv()
-
-wandb_api_key = (os.getenv("WANDB_API_KEY") or "").strip()
-wandb_mode = os.getenv("WANDB_MODE", "").strip().lower()
-if wandb_mode not in {"", "online", "offline", "disabled"}:
-    raise ValueError(
-        "Invalid WANDB_MODE. Use one of: online, offline, disabled."
-    )
-
-if wandb_api_key:
-    wandb.login(key=wandb_api_key)
-
-else:
-    wandb.offline = True
-    
-
+load_dotenv()
+WANDB_API_KEY = os.getenv("WANDB_API_KEY")
+WANDB_ENTITY = os.getenv("WANDB_ENTITY", "cancervision")
+print(f"WANDB_API_KEY found: {WANDB_API_KEY is not None}")
+print(f"WANDB_ENTITY found: {WANDB_ENTITY is not None}")
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -269,7 +252,7 @@ def main():
     # W&B experiment tracking
     wandb.init(
         project="cancervision",
-        entity="cancervision",
+        entity=WANDB_ENTITY,
         mode=effective_wandb_mode,
         config={
             "max_epochs": args.max_epochs,

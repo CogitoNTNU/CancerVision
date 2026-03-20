@@ -24,6 +24,9 @@ echo "The job was run on these nodes: $SLURM_JOB_NODELIST"
 SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-.}
 module purge
 
+set -a  # Automatically export all variables
+source <(grep -v '^#' ${WORKDIR}/.env | grep -v '^$')
+set +a
 
 #make sure uv is installed on your cluster
 # curl -LsSf https://astral.sh/uv/install.sh | sh

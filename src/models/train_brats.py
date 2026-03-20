@@ -57,7 +57,7 @@ WANDB_ENTITY = os.getenv("WANDB_ENTITY", "cancervision")
 print(f"WANDB_API_KEY found: {WANDB_API_KEY is not None}")
 print(f"WANDB_ENTITY found: {WANDB_ENTITY is not None}")
 
-wandb.login(key=WANDB_API_KEY, entity=WANDB_ENTITY)
+wandb.login(key=WANDB_API_KEY)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

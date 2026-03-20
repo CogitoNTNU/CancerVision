@@ -16,7 +16,8 @@ dependencies = [
     "nibabel>=5.4.0",
     "ignite>=1.1.0",
     "weave>=0.52.30",
-    "dotenv>=0.9.9",
+    "python-dotenv>=1.1.1",
+    "h5py>=3.16.0",
 ]
 
 [tool.uv.sources]

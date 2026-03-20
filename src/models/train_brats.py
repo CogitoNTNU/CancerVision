@@ -50,9 +50,23 @@ from datasets import ConvertToMultiChannelBasedOnBratsClassesd  # noqa: E402
 # Load config from .env if available
 # ---------------------------------------------------------------------------
 from dotenv import load_dotenv
-load_dotenv()
-wandb_api_key = os.getenv("WANDB_API_KEY")
-if wandb_api_key is not None:
+
+_project_root = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_dotenv_path = os.path.join(_project_root, ".env")
+_dotenv_exists = os.path.isfile(_dotenv_path)
+if _dotenv_exists:
+    load_dotenv(dotenv_path=_dotenv_path)
+else:
+    load_dotenv()
+
+wandb_api_key = (os.getenv("WANDB_API_KEY") or "").strip()
+wandb_mode = os.getenv("WANDB_MODE", "").strip().lower()
+if wandb_mode not in {"", "online", "offline", "disabled"}:
+    raise ValueError(
+        "Invalid WANDB_MODE. Use one of: online, offline, disabled."
+    )
+
+if wandb_api_key:
     wandb.login(key=wandb_api_key)
 
 else:
@@ -244,9 +258,19 @@ def main():
     args = parse_args()
     print_config()
 
+    print(f".env path      : {_dotenv_path}")
+    print(f".env exists    : {_dotenv_exists}")
+
+    # Auto-disable W&B in non-interactive environments when no API key is set.
+    effective_wandb_mode = wandb_mode or ("online" if wandb_api_key else "disabled")
+    if effective_wandb_mode == "disabled":
+        print("WANDB_API_KEY not found. Running with W&B disabled.")
+
     # W&B experiment tracking
     wandb.init(
         project="cancervision",
+        entity="cancervision",
+        mode=effective_wandb_mode,
         config={
             "max_epochs": args.max_epochs,
             "batch_size": args.batch_size,

@@ -25,10 +25,7 @@ SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-.}
 module purge
 
 
-#make sure uv is instal
-lset -a  # Automatically export all variables
- ource <(grep -v '^#' ${WORKDIR}/.env | grep -v '^$')
-  t +aed on your cluster
+#make sure uv is installed and available in the PATH. If not, install it using the following command:
 # curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 uv run main.py --batch-size 32 --max-epochs 100 --num-workers 8

@@ -9,6 +9,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import sys
 import time
@@ -59,15 +60,80 @@ if _dotenv_exists:
 else:
     load_dotenv()
 
-wandb_api_key = (os.getenv("WANDB_API_KEY") or "").strip()
-wandb_mode = os.getenv("WANDB_MODE", "").strip().lower()
+wandb_api_key = os.getenv("WANDB_API_KEY")
+wandb_mode = (os.getenv("WANDB_MODE") or "").strip().lower()
 if wandb_mode not in {"", "online", "offline", "disabled"}:
     raise ValueError(
         "Invalid WANDB_MODE. Use one of: online, offline, disabled."
     )
 
-if wandb_api_key:
-    wandb.login(key=wandb_api_key)
+
+def configure_logging() -> logging.Logger:
+    """Configure root logging once and return a module logger."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    return logging.getLogger(__name__)
+
+
+def init_wandb(args, logger: logging.Logger) -> bool:
+    """Initialize W&B safely.
+
+    Returns True if W&B is active for this run, False otherwise.
+    """
+    if not wandb_api_key and wandb_mode == "":
+        effective_wandb_mode = "disabled"
+    else:
+        effective_wandb_mode = wandb_mode or "online"
+
+    if effective_wandb_mode == "disabled":
+        logger.info("W&B disabled for this run.")
+        return False
+
+    try:
+        if wandb_api_key:
+            wandb.login(key=wandb_api_key)
+        else:
+            # Allow anonymous logging when no key is provided but W&B is enabled.
+            wandb.login(anonymous="allow")
+    except Exception as exc:
+        logger.warning(
+            "W&B login failed (%s). Continuing with W&B disabled.", exc
+        )
+        return False
+
+    try:
+        wandb.init(
+            project="cancervision",
+            entity="dev_cogito_ntnu",
+            mode=effective_wandb_mode,
+            config={
+                "max_epochs": args.max_epochs,
+                "batch_size": args.batch_size,
+                "lr": args.lr,
+                "weight_decay": args.weight_decay,
+                "val_interval": args.val_interval,
+                "seed": args.seed,
+                "roi_size": args.roi_size,
+                "num_samples": args.num_samples,
+                "test_size": args.test_size,
+            },
+        )
+        logger.info("W&B initialized in %s mode.", effective_wandb_mode)
+        return True
+    except Exception as exc:
+        logger.warning(
+            "W&B init failed (%s). Continuing with W&B disabled.", exc
+        )
+        return False
+
+
+def log_wandb(wandb_enabled: bool, payload: dict) -> None:
+    """Log to W&B only when initialized."""
+    if wandb_enabled:
+        wandb.log(payload)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -252,33 +318,16 @@ def get_val_transforms():
 # ---------------------------------------------------------------------------
 def main():
     args = parse_args()
+    logger = configure_logging()
     print_config()
 
-    print(f".env path      : {_dotenv_path}")
-    print(f".env exists    : {_dotenv_exists}")
+    logger.info(".env path      : %s", _dotenv_path)
+    logger.info(".env exists    : %s", _dotenv_exists)
+    logger.info("WANDB_API_KEY  : %s", "present" if wandb_api_key else "missing")
+    logger.info("WANDB_MODE     : %s", wandb_mode or "<unset>")
 
-    # Auto-disable W&B in non-interactive environments when no API key is set.
-    effective_wandb_mode = wandb_mode or ("online" if wandb_api_key else "disabled")
-    if effective_wandb_mode == "disabled":
-        print("WANDB_API_KEY not found. Running with W&B disabled.")
-
-    # W&B experiment tracking
-    wandb.init(
-        project="cancervision",
-        entity="cancervision",
-        mode=effective_wandb_mode,
-        config={
-            "max_epochs": args.max_epochs,
-            "batch_size": args.batch_size,
-            "lr": args.lr,
-            "weight_decay": args.weight_decay,
-            "val_interval": args.val_interval,
-            "seed": args.seed,
-            "roi_size": args.roi_size,
-            "num_samples": args.num_samples,
-            "test_size": args.test_size,
-        },
-    )
+    # W&B experiment tracking (safe initialization)
+    wandb_enabled = init_wandb(args, logger)
 
     # Reproducibility
     set_determinism(seed=args.seed)
@@ -287,18 +336,18 @@ def main():
     # Data
     # ------------------------------------------------------------------
     data_dir = os.path.normpath(args.data_dir)
-    print(f"Data directory : {data_dir}")
-    print(f"Exists         : {os.path.isdir(data_dir)}")
+    logger.info("Data directory : %s", data_dir)
+    logger.info("Exists         : %s", os.path.isdir(data_dir))
 
     data_dicts = build_data_dicts(data_dir)
-    print(f"Total patients : {len(data_dicts)}")
+    logger.info("Total patients : %d", len(data_dicts))
 
     # 80/20 patient-level split
     train_dicts, val_dicts = train_test_split(
         data_dicts, test_size=args.test_size, random_state=42
     )
-    print(f"Train patients : {len(train_dicts)}")
-    print(f"Val patients   : {len(val_dicts)}")
+    logger.info("Train patients : %d", len(train_dicts))
+    logger.info("Val patients   : %d", len(val_dicts))
 
     roi_size = tuple(args.roi_size)
     train_transform = get_train_transforms(roi_size, args.num_samples)
@@ -308,7 +357,7 @@ def main():
     val_ds = Dataset(data=val_dicts, transform=val_transform)
 
     num_workers = min(args.num_workers, os.cpu_count() or 1)
-    print(f"DataLoader num_workers: {num_workers}")
+    logger.info("DataLoader num_workers: %d", num_workers)
 
     train_loader = DataLoader(
         train_ds,
@@ -335,7 +384,7 @@ def main():
         device = torch.device("mps")
     else:
         device = torch.device("cpu")
-    print(f"Using device: {device}")
+    logger.info("Using device: %s", device)
 
     model = UNet(
         spatial_dims=3,
@@ -382,8 +431,8 @@ def main():
     total_start = time.time()
     for epoch in range(args.max_epochs):
         epoch_start = time.time()
-        print("-" * 40)
-        print(f"Epoch {epoch + 1}/{args.max_epochs}")
+        logger.info("%s", "-" * 40)
+        logger.info("Epoch %d/%d", epoch + 1, args.max_epochs)
 
         # ---- train ----
         model.train()
@@ -403,24 +452,27 @@ def main():
 
             epoch_loss += loss.item()
             if step % 10 == 0:
-                print(
-                    f"  step {step}/{len(train_ds) // train_loader.batch_size}"
-                    f"  train_loss: {loss.item():.4f}"
-                    f"  step_time: {time.time() - step_start:.4f}s"
+                logger.info(
+                    "  step %d/%d  train_loss: %.4f  step_time: %.4fs",
+                    step,
+                    len(train_ds) // train_loader.batch_size,
+                    loss.item(),
+                    time.time() - step_start,
                 )
 
         lr_scheduler.step()
         epoch_loss /= max(step, 1)
         epoch_loss_values.append(epoch_loss)
         current_lr = lr_scheduler.get_last_lr()[0]
-        print(f"  avg loss: {epoch_loss:.4f}  lr: {current_lr:.2e}")
+        logger.info("  avg loss: %.4f  lr: %.2e", epoch_loss, current_lr)
 
-        wandb.log(
+        log_wandb(
+            wandb_enabled,
             {
                 "train/loss": epoch_loss,
                 "train/lr": current_lr,
                 "epoch": epoch + 1,
-            }
+            },
         )
 
         # ---- validate ----
@@ -460,9 +512,10 @@ def main():
                     best_metric_epoch = epoch + 1
                     ckpt_path = os.path.join(save_dir, "best_metric_model.pth")
                     torch.save(model.state_dict(), ckpt_path)
-                    print(f"  -> saved new best model to {ckpt_path}")
+                    logger.info("  -> saved new best model to %s", ckpt_path)
 
-                wandb.log(
+                log_wandb(
+                    wandb_enabled,
                     {
                         "val/dice_mean": metric,
                         "val/dice_tc": metric_tc,
@@ -470,34 +523,40 @@ def main():
                         "val/dice_et": metric_et,
                         "val/best_dice": best_metric,
                         "epoch": epoch + 1,
-                    }
+                    },
                 )
 
-                print(
-                    f"  val dice: {metric:.4f}"
-                    f"  (TC={metric_tc:.4f}  WT={metric_wt:.4f}  ET={metric_et:.4f})"
-                    f"\n  best dice: {best_metric:.4f} @ epoch {best_metric_epoch}"
+                logger.info(
+                    "  val dice: %.4f  (TC=%.4f  WT=%.4f  ET=%.4f)",
+                    metric,
+                    metric_tc,
+                    metric_wt,
+                    metric_et,
+                )
+                logger.info(
+                    "  best dice: %.4f @ epoch %d", best_metric, best_metric_epoch
                 )
 
-        print(f"  epoch time: {time.time() - epoch_start:.1f}s")
+        logger.info("  epoch time: %.1fs", time.time() - epoch_start)
 
     total_time = time.time() - total_start
 
     # ------------------------------------------------------------------
     # Summary
     # ------------------------------------------------------------------
-    print("=" * 60)
-    print("Training complete")
-    print(f"  Best mean Dice : {best_metric:.4f} @ epoch {best_metric_epoch}")
+    logger.info("%s", "=" * 60)
+    logger.info("Training complete")
+    logger.info("  Best mean Dice : %.4f @ epoch %d", best_metric, best_metric_epoch)
     if metric_values_tc:
-        print(f"  Best TC Dice   : {max(metric_values_tc):.4f}")
-        print(f"  Best WT Dice   : {max(metric_values_wt):.4f}")
-        print(f"  Best ET Dice   : {max(metric_values_et):.4f}")
-    print(f"  Total time     : {total_time:.1f}s ({total_time / 3600:.2f}h)")
-    print(f"  Checkpoint     : {os.path.join(save_dir, 'best_metric_model.pth')}")
-    print("=" * 60)
+        logger.info("  Best TC Dice   : %.4f", max(metric_values_tc))
+        logger.info("  Best WT Dice   : %.4f", max(metric_values_wt))
+        logger.info("  Best ET Dice   : %.4f", max(metric_values_et))
+    logger.info("  Total time     : %.1fs (%.2fh)", total_time, total_time / 3600)
+    logger.info("  Checkpoint     : %s", os.path.join(save_dir, "best_metric_model.pth"))
+    logger.info("%s", "=" * 60)
 
-    wandb.finish()
+    if wandb_enabled:
+        wandb.finish()
 
 
 if __name__ == "__main__":

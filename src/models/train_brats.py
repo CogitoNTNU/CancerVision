@@ -56,6 +56,8 @@ WANDB_API_KEY = os.getenv("WANDB_API_KEY")
 WANDB_ENTITY = os.getenv("WANDB_ENTITY", "cancervision")
 print(f"WANDB_API_KEY found: {WANDB_API_KEY is not None}")
 print(f"WANDB_ENTITY found: {WANDB_ENTITY is not None}")
+
+wandb.login(key=WANDB_API_KEY, entity=WANDB_ENTITY)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -240,12 +242,11 @@ def get_val_transforms():
 def main():
     args = parse_args()
     print_config()
-    
+
     # W&B experiment tracking
     wandb.init(
         project="cancervision",
         entity=WANDB_ENTITY,
-        mode=effective_wandb_mode,
         config={
             "max_epochs": args.max_epochs,
             "batch_size": args.batch_size,

@@ -11,6 +11,7 @@
 #SBATCH --mail-user=eldarja@ntnu.no
 #SBATCH --mail-type=ALL
 
+
 # p100 needs cuda 12.6 or lower
 
 WORKDIR=${SLURM_SUBMIT_DIR}
@@ -25,8 +26,7 @@ SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-.}
 module purge
 
 
-#make sure uv is installed on your cluster
+#make sure uv is installed and available in the PATH. If not, install it using the following command:
 # curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
-uv run python -c "import torch, os; print('torch ok', torch.version); print('key?', bool(os.getenv('WANDB_API_KEY')))"
-uv run main.py --batch-size 1 --num-workers 0 --num-samples 1 --roi-size 96 96 96
+uv run main.py --batch-size 32 --max-epochs 100 --num-workers 8

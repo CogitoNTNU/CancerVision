@@ -1,9 +1,9 @@
 #!/bin/sh
 #SBATCH --account=studiegrupper-cogito
 #SBATCH --job-name="Cancer Vision UNet 3D"
-#SBATCH --time=02:15:00
+#SBATCH --time=06:15:00
 #SBATCH --partition=GPUQ
-#SBATCH --gres=gpu:v100:1
+#SBATCH --gres=gpu:a100:1
 #SBATCH --mem=32G
 #SBATCH --nodes=1
 #SBATCH --output=slurm_terminal.out
@@ -29,5 +29,5 @@ module purge
 #make sure uv is installed and available in the PATH. If not, install it using the following command:
 # curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
-uv run main.py --batch-size 1 --num-workers 0 --num-samples 1 --roi-size 96 96 96 --data-dir /cluster/home/eldarja/CancerVision/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData
+uv run main.py --batch-size 16 --num-workers 1 --num-samples 1 --roi-size 96 96 96 --data-dir /cluster/home/eldarja/CancerVision/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData
 

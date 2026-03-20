@@ -49,7 +49,11 @@ from datasets import ConvertToMultiChannelBasedOnBratsClassesd  # noqa: E402
 # ---------------------------------------------------------------------------
 # Load config from .env if available
 # ---------------------------------------------------------------------------
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(*args, **kwargs):
+        return False
 
 _project_root = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
 _dotenv_path = os.path.join(_project_root, ".env")

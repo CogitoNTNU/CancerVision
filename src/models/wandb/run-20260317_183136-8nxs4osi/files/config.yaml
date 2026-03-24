@@ -1,0 +1,84 @@
+_wandb:
+    value:
+        cli_version: 0.25.0
+        e:
+            fn9j96qbvuzlf5ofy009qlezmj9z1ri6:
+                apple: {}
+                args:
+                    - --preprocessed-dir
+                    - ../../res/data/brats2020_preprocessed
+                    - --cache-data
+                codePath: src/models/train_brats.py
+                codePathLocal: train_brats.py
+                cpu_count: 12
+                cpu_count_logical: 12
+                disk:
+                    /:
+                        total: "994662584320"
+                        used: "716428427264"
+                email: raviksann@outlook.com
+                executable: /Users/heap/cogito/cancervision/.venv/bin/python
+                git:
+                    commit: 9e78afbffd7fa5e24789350aa3e9cdbead697511
+                    remote: git@github.com:cogitontnu/cancervision
+                host: dhcp-10-24-45-111.wlan.ntnu.no
+                memory:
+                    total: "34359738368"
+                os: macOS-26.3.1-arm64-arm-64bit-Mach-O
+                program: /Users/heap/cogito/cancervision/src/models/train_brats.py
+                python: CPython 3.13.5
+                root: /Users/heap/cogito/cancervision/src/models
+                startedAt: "2026-03-17T17:31:36.468222Z"
+                writerId: fn9j96qbvuzlf5ofy009qlezmj9z1ri6
+        m: []
+        python_version: 3.13.5
+        t:
+            "1":
+                - 1
+                - 5
+                - 10
+                - 41
+                - 48
+                - 51
+                - 53
+            "2":
+                - 1
+                - 5
+                - 10
+                - 41
+                - 48
+                - 51
+                - 53
+            "3":
+                - 16
+            "4": 3.13.5
+            "5": 0.25.0
+            "12": 0.25.0
+            "13": darwin-arm64
+batch_size:
+    value: 1
+cache_data:
+    value: true
+lr:
+    value: 0.0001
+max_epochs:
+    value: 100
+num_samples:
+    value: 4
+preprocessed:
+    value: true
+roi_size:
+    value:
+        - 128
+        - 128
+        - 128
+seed:
+    value: 0
+sw_overlap:
+    value: 0.25
+test_size:
+    value: 0.2
+val_interval:
+    value: 1
+weight_decay:
+    value: 1e-05

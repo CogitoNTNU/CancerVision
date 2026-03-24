@@ -1,0 +1,37 @@
+{
+  "os": "macOS-26.3-arm64-arm-64bit-Mach-O",
+  "python": "CPython 3.13.5",
+  "startedAt": "2026-03-07T15:27:15.688326Z",
+  "program": "/Users/heap/cogito/cancervision/src/models/train_brats.py",
+  "codePath": "src/models/train_brats.py",
+  "codePathLocal": "train_brats.py",
+  "git": {
+    "remote": "git@github.com:cogitontnu/cancervision",
+    "commit": "9e78afbffd7fa5e24789350aa3e9cdbead697511"
+  },
+  "email": "raviksann@outlook.com",
+  "root": "/Users/heap/cogito/cancervision/src/models",
+  "host": "dhcp-10-24-44-128.wlan.ntnu.no",
+  "executable": "/Users/heap/cogito/cancervision/.venv/bin/python",
+  "cpu_count": 12,
+  "cpu_count_logical": 12,
+  "disk": {
+    "/": {
+      "total": "994662584320",
+      "used": "675858247680"
+    }
+  },
+  "memory": {
+    "total": "34359738368"
+  },
+  "apple": {
+    "name": "Apple M2 Max",
+    "ecpuCores": 4,
+    "pcpuCores": 8,
+    "gpuCores": 38,
+    "memoryGb": 32,
+    "swapTotalBytes": "37580963840",
+    "ramTotalBytes": "34359738368"
+  },
+  "writerId": "bwcqi3bj7gdaqam8tlb0vlhpmvz1wa9g"
+}

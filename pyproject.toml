@@ -10,6 +10,7 @@ dependencies = [
     "scikit-learn",
     "wandb",
     "nibabel>=5.4.0",
+    "tensorboard>=2.20.0",
 ]
 
 [tool.uv.sources]

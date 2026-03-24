@@ -1,0 +1,116 @@
+_wandb:
+    value:
+        cli_version: 0.25.1
+        e:
+            ep4xb4kk9rjclvggk22du44elrp2v6p9:
+                apple: {}
+                args:
+                    - --epochs
+                    - "10"
+                    - --batch-size
+                    - "32"
+                    - --num-workers
+                    - "0"
+                    - --val-interval
+                    - "1"
+                codePath: src/models/3d-classification.py
+                codePathLocal: src/models/3d-classification.py
+                cpu_count: 12
+                cpu_count_logical: 12
+                disk:
+                    /:
+                        total: "994662584320"
+                        used: "721955786752"
+                email: raviksann@outlook.com
+                executable: /Users/heap/cogito/cancervision/.venv/bin/python
+                git:
+                    commit: e967257b722e836cf9bf97794ef8889aa0a9e2a8
+                    remote: git@github.com:cogitontnu/cancervision
+                host: dhcp-10-24-44-66.wlan.ntnu.no
+                memory:
+                    total: "34359738368"
+                os: macOS-26.3.1-arm64-arm-64bit-Mach-O
+                program: /Users/heap/cogito/cancervision/src/models/3d-classification.py
+                python: CPython 3.13.5
+                root: /Users/heap/cogito/cancervision
+                startedAt: "2026-03-24T17:24:31.340974Z"
+                writerId: ep4xb4kk9rjclvggk22du44elrp2v6p9
+        m: []
+        python_version: 3.13.5
+        t:
+            "1":
+                - 1
+                - 5
+                - 10
+                - 41
+                - 48
+                - 53
+            "2":
+                - 1
+                - 5
+                - 10
+                - 41
+                - 48
+                - 53
+            "3":
+                - 13
+                - 16
+            "4": 3.13.5
+            "5": 0.25.1
+            "12": 0.25.1
+            "13": darwin-arm64
+        visualize:
+            val_confusion_matrix:
+                panel_config:
+                    fieldSettings:
+                        Actual: Actual
+                        Predicted: Predicted
+                        nPredictions: nPredictions
+                    panelDefId: wandb/confusion_matrix/v1
+                    stringSettings:
+                        title: Confusion Matrix Curve
+                    transform:
+                        name: tableWithLeafColNames
+                    userQuery:
+                        queryFields:
+                            - args:
+                                - name: runSets
+                                  value: ${runSets}
+                              fields:
+                                - fields: []
+                                  name: id
+                                - fields: []
+                                  name: name
+                                - fields: []
+                                  name: _defaultColorIndex
+                                - args:
+                                    - name: tableKey
+                                      value: val_confusion_matrix_table
+                                  fields: []
+                                  name: summaryTable
+                              name: runSets
+                panel_type: Vega2
+batch_size:
+    value: 32
+epochs:
+    value: 10
+learning_rate:
+    value: 0.0002
+num_workers:
+    value: 0
+patience:
+    value: 15
+seed:
+    value: 42
+train_samples:
+    value: 757
+use_amp:
+    value: false
+val_interval:
+    value: 1
+val_samples:
+    value: 190
+val_split:
+    value: 0.2
+weight_decay:
+    value: 1e-05

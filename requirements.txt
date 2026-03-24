@@ -145,7 +145,7 @@ pillow==12.1.1
     #   matplotlib
     #   polyfile-weave
     #   torchvision
-platformdirs==4.3.8
+platformdirs==4.9.4
     # via wandb
 polyfile-weave==0.5.9
     # via weave

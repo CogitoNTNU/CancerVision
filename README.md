@@ -92,8 +92,53 @@ For example: OS version, programs, libraries, etc.
 To run the project, run the following command from the root directory of the project:
 
 ```bash
+python main.py datasets
+python main.py datasets --search-dir /path/to/data --max-depth 5
+python main.py models
+python main.py web --host 127.0.0.1 --port 8080
 
+python main.py train-segmentation --dataset brats --model-backend monai_unet [SEGMENTATION_TRAIN_ARGS]
+python main.py train-segmentation-h5 --data-dir res/datasets/archive/BraTS2020_training_data [H5_TRAIN_ARGS]
+python main.py train-classifier --dataset brats [CLASSIFIER_TRAIN_ARGS]
+python main.py infer \
+  --dataset brats \
+  --sample-path /path/to/sample_or_patient_dir \
+  --segmentation-checkpoint res/models/best_segmentation_model.pth \
+  [--classifier-checkpoint res/models/tumor_classifier.pth] \
+  [--model-backend monai_unet] \
+  [--classifier-threshold 0.5] \
+  [--save-prediction-path res/predictions/patient_pred.nii.gz]
 ```
+
+`datasets` helps you find known datasets and register the dataset type.
+`models` shows available segmentation backends (currently `monai_unet` and `nnunet` placeholder).
+`web` starts a barebones browser interface for inference and preview visualization.
+
+For W&B logging, place `WANDB_API_KEY` (and optionally `WANDB_ENTITY`) in `.env`. Training commands load `.env` automatically.
+
+To add a new dataset format:
+1. Create a new adapter in `src/data/adapters/` implementing `DatasetAdapter`.
+2. Register it in `src/data/registry.py`.
+3. Use `python main.py datasets --search-dir /path/to/data` to confirm discovery.
+4. Train/infer with `--dataset <your-adapter-name>`.
+
+To add a new segmentation training backend:
+1. Implement a backend in `src/segmentation/backends/` by extending `SegmentationBackend`.
+2. Register it in `src/segmentation/registry.py`.
+3. Train with `python main.py train-segmentation --model-backend <backend-name>`.
+
+`infer` runs a clean two-step pipeline:
+1. Classifier checks if tumor is present.
+2. Segmentation runs only when classifier probability is above threshold.
+
+Default preprocessing (train and inference):
+1. Replace NaN/Inf with finite values.
+2. Clip each channel to non-zero 0.5/99.5 percentiles.
+3. Apply per-channel non-zero z-score normalization.
+
+In the web UI, after each run you get:
+1. A browser-rendered preview image (input slice + segmentation overlay).
+2. A downloadable prediction mask file in dataset-native format.
 
 <!-- TODO: Instructions on how to run the project and use its features. -->
 

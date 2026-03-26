@@ -6,9 +6,9 @@
 #SBATCH --job-name="dynunet-brats"
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=2
-#SBATCH --gres=gpu:a100:2
+#SBATCH --gres=gpu:h100:1
 #SBATCH --mem=64G
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=1
 #SBATCH --output=slurm_terminal.out
 #SBATCH --error=slurm_terminal.err
 #SBATCH --mail-user=eldarja@ntnu.no

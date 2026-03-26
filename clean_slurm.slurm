@@ -34,5 +34,5 @@ module purge
 #make sure uv is installed and available in the PATH. If not, install it using the following command:
 # curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
-uv run main.py --batch-size 16 --num-workers 1 --num-samples 1 --roi-size 96 96 96 --data-dir /cluster/home/eldarja/CancerVision/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData
+srun uv run python -m src.models.dynnet --batch-size 1 --num-workers 4 --num-samples 4 --roi-size 128 128 128 --wandb-mode online --run-name dynunet-brats-${SLURM_JOB_ID} --data-dir /cluster/home/eldarja/CancerVision/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData
 

@@ -1,14 +1,14 @@
 #!/bin/sh
 #SBATCH --account=studiegrupper-cogito
 #SBATCH --job-name="Cancer Vision UNet 3D"
-#SBATCH --time=06:15:00
+#SBATCH --time=14:15:00
 #SBATCH --partition=GPUQ
 #SBATCH --job-name="dynunet-brats"
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=2
 #SBATCH --gres=gpu:a100:2
-#SBATCH --mem=128G
-#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
+#SBATCH --cpus-per-task=2
 #SBATCH --output=slurm_terminal.out
 #SBATCH --error=slurm_terminal.err
 #SBATCH --mail-user=eldarja@ntnu.no

@@ -220,7 +220,6 @@ def main() -> None:
     if args.command == "infer":
         _run_inference(args)
         return
-
     raise ValueError(f"Unknown command: {args.command}")
 
 

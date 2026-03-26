@@ -89,8 +89,10 @@ For example: OS version, programs, libraries, etc.
 
 ## Usage
 
-To run the project, run the following command from the root directory of the project:
 
+You can run the project using either Python directly or with uv. Below are examples for both methods:
+
+**Using Python:**
 ```bash
 python main.py datasets
 python main.py datasets --search-dir /path/to/data --max-depth 5
@@ -101,6 +103,26 @@ python main.py train-segmentation --dataset brats --model-backend monai_unet [SE
 python main.py train-segmentation-h5 --data-dir res/datasets/archive/BraTS2020_training_data [H5_TRAIN_ARGS]
 python main.py train-classifier --dataset brats [CLASSIFIER_TRAIN_ARGS]
 python main.py infer \
+  --dataset brats \
+  --sample-path /path/to/sample_or_patient_dir \
+  --segmentation-checkpoint res/models/best_segmentation_model.pth \
+  [--classifier-checkpoint res/models/tumor_classifier.pth] \
+  [--model-backend monai_unet] \
+  [--classifier-threshold 0.5] \
+  [--save-prediction-path res/predictions/patient_pred.nii.gz]
+```
+
+**Using uv:**
+```bash
+uv run main.py datasets
+uv run main.py datasets --search-dir /path/to/data --max-depth 5
+uv run main.py models
+uv run main.py web --host 127.0.0.1 --port 8080
+
+uv run main.py train-segmentation --dataset brats --model-backend monai_unet [SEGMENTATION_TRAIN_ARGS]
+uv run main.py train-segmentation-h5 --data-dir res/datasets/archive/BraTS2020_training_data [H5_TRAIN_ARGS]
+uv run main.py train-classifier --dataset brats [CLASSIFIER_TRAIN_ARGS]
+uv run main.py infer \
   --dataset brats \
   --sample-path /path/to/sample_or_patient_dir \
   --segmentation-checkpoint res/models/best_segmentation_model.pth \

@@ -3,13 +3,18 @@
 #SBATCH --job-name="Cancer Vision UNet 3D"
 #SBATCH --time=06:15:00
 #SBATCH --partition=GPUQ
-#SBATCH --gres=gpu:a100:1
-#SBATCH --mem=32G
+#SBATCH --job-name="dynunet-brats"
 #SBATCH --nodes=1
+#SBATCH --ntasks-per-node=2
+#SBATCH --gres=gpu:a100:2
+#SBATCH --mem=128G
+#SBATCH --cpus-per-task=8
 #SBATCH --output=slurm_terminal.out
 #SBATCH --error=slurm_terminal.err
 #SBATCH --mail-user=eldarja@ntnu.no
 #SBATCH --mail-type=ALL
+
+
 
 
 # p100 needs cuda 12.6 or lower

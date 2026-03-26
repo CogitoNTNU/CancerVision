@@ -1,78 +1,65 @@
-#!/bin/sh
-#SBATCH --account=ie-idi
-#SBATCH --job-name="Cancervision UNet 3D"
-#SBATCH --time=00:30:00
+#!/bin/bash
+# Canonical Idun DynUNet batch script.
+# Prepare the virtual environment on the login node before submitting:
+#   uv sync --frozen
+# Smoke test submission:
+#   sbatch --account=<account> --gres=gpu:1 --ntasks-per-node=1 --cpus-per-task=4 \
+#     --mem=32G --time=00:20:00 scripts/train_brats.sbatch
+
 #SBATCH --partition=GPUQ
-#SBATCH --gres=gpu:v100:1
-#SBATCH --mem=32GB
+#SBATCH --account=<account>
+#SBATCH --job-name="dynunet-brats"
 #SBATCH --nodes=1
-#SBATCH --output=slurm_outputs/output_combined.txt
-#SBATCH --error=slurm_outputs/output_combined.err
-#SBATCH --mail-user=ludvigho@ntnu.no
-#SBATCH --mail-type=ALL
+#SBATCH --ntasks-per-node=2
+#SBATCH --gres=gpu:a100:2
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
+#SBATCH --time=24:00:00
+#SBATCH --output=slurm_outputs/%x-%j.out
+#SBATCH --error=slurm_outputs/%x-%j.err
+#SBATCH --mail-type=FAIL
 
-WORKDIR=${SLURM_SUBMIT_DIR}
-cd ${WORKDIR}
-echo "Running from this directory: $SLURM_SUBMIT_DIR"
-echo "Name of job: $SLURM_JOB_NAME"
-echo "ID of job: $SLURM_JOB_ID"
-echo "The job was run on these nodes: $SLURM_JOB_NODELIST"
+set -euo pipefail
 
-ENV_PATH="/cluster/work/$(whoami)/DEEPTACTICS-TRACKMANIA"
+WORKDIR="${SLURM_SUBMIT_DIR}"
+cd "${WORKDIR}"
+mkdir -p slurm_outputs
 
-# Load required modules
+echo "Running from: ${WORKDIR}"
+echo "Job name: ${SLURM_JOB_NAME}"
+echo "Job id: ${SLURM_JOB_ID}"
+echo "Node list: ${SLURM_JOB_NODELIST}"
+echo "Tasks per node: ${SLURM_NTASKS_PER_NODE:-unknown}"
+
 module purge
-module load Anaconda3/2024.02-1
-module load SWIG/4.1.1-GCCcore-12.3.0  # Required for Box2D compilation
+module load CUDA/12.4.0
+module load cuDNN/9.1.0-CUDA-12.4.0
 
-# Create conda environment only if it doesn't exist
-if [ ! -d "${ENV_PATH}" ]; then
-    echo "Creating new conda environment..."
-    conda create -y --prefix ${ENV_PATH} python=3.11
-else
-    echo "Conda environment already exists, skipping creation."
+if [ ! -x "${WORKDIR}/.venv/bin/python" ]; then
+  echo "Missing ${WORKDIR}/.venv/bin/python. Create the environment on the login node first."
+  exit 1
 fi
 
-# Activate the environment
-source activate ${ENV_PATH}
-
-# Load environment variables from .env file (ignore comments and empty lines)
 if [ -f "${WORKDIR}/.env" ]; then
-    echo "Loading environment variables from .env..."
-    set -a  # Automatically export all variables
-    source <(grep -v '^#' ${WORKDIR}/.env | grep -v '^$')
-    set +a
-else
-    echo "Warning: .env file not found. W&B logging may not work."
+  set -a
+  # shellcheck disable=SC1091
+  source "${WORKDIR}/.env"
+  set +a
 fi
 
-# Add project root to Python path so 'src' can be found as a module
-export PYTHONPATH="${WORKDIR}:${PYTHONPATH}"
-echo "PYTHONPATH set to: ${PYTHONPATH}"
+export PYTHONPATH="${WORKDIR}:${PYTHONPATH:-}"
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK}"
+export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK}"
+export MASTER_ADDR="${MASTER_ADDR:-127.0.0.1}"
+export MASTER_PORT="${MASTER_PORT:-29500}"
 
+echo "Python: ${WORKDIR}/.venv/bin/python"
+echo "MASTER_ADDR=${MASTER_ADDR}"
+echo "MASTER_PORT=${MASTER_PORT}"
+echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
 
-# Install/update dependencies
-echo "Installing/updating dependencies..."
-pip install -r requirements.txt
-
-echo "Installed packages:"
-pip freeze
-
-# Check GPU info
-echo "================================================"
-echo "GPU Information:"
-echo "================================================"
 nvidia-smi
-echo ""
-echo "PyTorch CUDA availability:"
-python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
-echo "================================================"
-echo ""
 
-# Run the training script
-python main.py
-
-# Deactivate the environment
-conda deactivate
-
-echo "Job finished"
+srun "${WORKDIR}/.venv/bin/python" -m src.models.dynnet \
+  --run-name "dynunet-brats-${SLURM_JOB_ID}" \
+  --wandb-mode "${WANDB_MODE:-offline}"

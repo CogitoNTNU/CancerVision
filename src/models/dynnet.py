@@ -10,7 +10,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 import torch
 import torch.distributed as dist
@@ -58,10 +58,22 @@ DEFAULT_SW_BATCH_SIZE = 4
 @dataclass
 class RuntimeContext:
     device: torch.device
+    device_index: int | None
     distributed: bool
     rank: int
     local_rank: int
     world_size: int
+
+
+@dataclass(frozen=True)
+class DistributedLaunchConfig:
+    world_size: int
+    rank: int
+    local_rank: int
+    distributed: bool
+    allocated_gpu_count: int | None
+    visible_gpu_count: int
+    device_index: int | None
 
 
 class NoOpWandbRun:
@@ -266,42 +278,163 @@ def should_use_amp(args: argparse.Namespace, context: RuntimeContext) -> bool:
     return bool(args.amp and context.device.type == "cuda")
 
 
-def setup_device_and_distributed() -> RuntimeContext:
-    world_size = int(os.environ.get("WORLD_SIZE", os.environ.get("SLURM_NTASKS", "1")))
-    rank = int(os.environ.get("RANK", os.environ.get("SLURM_PROCID", "0")))
-    local_rank = int(os.environ.get("LOCAL_RANK", os.environ.get("SLURM_LOCALID", "0")))
-    distributed = world_size > 1
+def _parse_env_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    value = value.strip()
+    if not value.isdigit():
+        return None
+    return int(value)
 
-    if distributed:
-        if not torch.cuda.is_available():
-            raise RuntimeError("Distributed training requires CUDA for this trainer.")
-        os.environ.setdefault("WORLD_SIZE", str(world_size))
-        os.environ.setdefault("RANK", str(rank))
-        os.environ.setdefault("LOCAL_RANK", str(local_rank))
+
+def _count_csv_entries(value: str | None) -> int | None:
+    if value is None:
+        return None
+    entries = [entry.strip() for entry in value.split(",") if entry.strip()]
+    return len(entries) if entries else None
+
+
+def detect_allocated_gpu_count(env: Mapping[str, str] | None = None) -> int | None:
+    env = os.environ if env is None else env
+    slurm_gpus_on_node = _parse_env_int(env.get("SLURM_GPUS_ON_NODE"))
+    if slurm_gpus_on_node is not None:
+        return slurm_gpus_on_node
+
+    slurm_step_gpus = _count_csv_entries(env.get("SLURM_STEP_GPUS"))
+    if slurm_step_gpus is not None:
+        return slurm_step_gpus
+
+    cuda_visible_devices = _count_csv_entries(env.get("CUDA_VISIBLE_DEVICES"))
+    if cuda_visible_devices is not None:
+        return cuda_visible_devices
+
+    return None
+
+
+def _format_launch_env(env: Mapping[str, str]) -> str:
+    keys = (
+        "WORLD_SIZE",
+        "RANK",
+        "LOCAL_RANK",
+        "SLURM_NTASKS",
+        "SLURM_PROCID",
+        "SLURM_LOCALID",
+        "SLURM_GPUS_ON_NODE",
+        "SLURM_STEP_GPUS",
+        "CUDA_VISIBLE_DEVICES",
+    )
+    return ", ".join(f"{key}={env.get(key, '<unset>')}" for key in keys)
+
+
+def resolve_distributed_launch_config(
+    env: Mapping[str, str] | None = None,
+    *,
+    cuda_available: bool,
+    visible_gpu_count: int,
+) -> DistributedLaunchConfig:
+    env = os.environ if env is None else env
+
+    world_size = int(env.get("WORLD_SIZE", env.get("SLURM_NTASKS", "1")))
+    rank = int(env.get("RANK", env.get("SLURM_PROCID", "0")))
+    local_rank = int(env.get("LOCAL_RANK", env.get("SLURM_LOCALID", "0")))
+    distributed = world_size > 1
+    allocated_gpu_count = detect_allocated_gpu_count(env)
+
+    if not distributed:
+        return DistributedLaunchConfig(
+            world_size=world_size,
+            rank=rank,
+            local_rank=local_rank,
+            distributed=False,
+            allocated_gpu_count=allocated_gpu_count,
+            visible_gpu_count=visible_gpu_count,
+            device_index=None,
+        )
+
+    if not cuda_available:
+        raise RuntimeError("Distributed training requires CUDA for this trainer.")
+
+    if allocated_gpu_count is not None and allocated_gpu_count < world_size:
+        raise RuntimeError(
+            "Distributed launch misconfigured: allocated GPU count is smaller than "
+            f"world size (world_size={world_size}, allocated_gpu_count={allocated_gpu_count}, "
+            f"rank={rank}, local_rank={local_rank}). Relevant env: {_format_launch_env(env)}"
+        )
+
+    if visible_gpu_count < 1:
+        raise RuntimeError(
+            "Distributed training requires at least one CUDA-visible GPU per process "
+            f"(visible_gpu_count={visible_gpu_count}, rank={rank}, local_rank={local_rank}, "
+            f"allocated_gpu_count={allocated_gpu_count}). Relevant env: {_format_launch_env(env)}"
+        )
+
+    if visible_gpu_count == 1 and (
+        allocated_gpu_count is None or allocated_gpu_count >= world_size
+    ):
+        device_index = 0
+    elif local_rank < visible_gpu_count:
+        device_index = local_rank
+    else:
+        raise RuntimeError(
+            "Unable to map local rank to a CUDA device "
+            f"(rank={rank}, local_rank={local_rank}, world_size={world_size}, "
+            f"visible_gpu_count={visible_gpu_count}, allocated_gpu_count={allocated_gpu_count}). "
+            f"Relevant env: {_format_launch_env(env)}"
+        )
+
+    return DistributedLaunchConfig(
+        world_size=world_size,
+        rank=rank,
+        local_rank=local_rank,
+        distributed=True,
+        allocated_gpu_count=allocated_gpu_count,
+        visible_gpu_count=visible_gpu_count,
+        device_index=device_index,
+    )
+
+
+def setup_device_and_distributed() -> RuntimeContext:
+    cuda_available = torch.cuda.is_available()
+    visible_gpu_count = torch.cuda.device_count() if cuda_available else 0
+    launch_config = resolve_distributed_launch_config(
+        cuda_available=cuda_available,
+        visible_gpu_count=visible_gpu_count,
+    )
+
+    if launch_config.distributed:
+        os.environ.setdefault("WORLD_SIZE", str(launch_config.world_size))
+        os.environ.setdefault("RANK", str(launch_config.rank))
+        os.environ.setdefault("LOCAL_RANK", str(launch_config.local_rank))
         os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
         os.environ.setdefault("MASTER_PORT", "29500")
-        torch.cuda.set_device(local_rank)
+        assert launch_config.device_index is not None
+        torch.cuda.set_device(launch_config.device_index)
         dist.init_process_group(
             backend="nccl",
             init_method="env://",
-            rank=rank,
-            world_size=world_size,
+            rank=launch_config.rank,
+            world_size=launch_config.world_size,
         )
-        device = torch.device("cuda", local_rank)
+        device = torch.device("cuda", launch_config.device_index)
+        device_index = launch_config.device_index
     else:
-        if torch.cuda.is_available():
+        if cuda_available:
             device = torch.device("cuda:0")
+            device_index = 0
         elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             device = torch.device("mps")
+            device_index = None
         else:
             device = torch.device("cpu")
+            device_index = None
 
     return RuntimeContext(
         device=device,
-        distributed=distributed,
-        rank=rank,
-        local_rank=local_rank,
-        world_size=world_size,
+        device_index=device_index,
+        distributed=launch_config.distributed,
+        rank=launch_config.rank,
+        local_rank=launch_config.local_rank,
+        world_size=launch_config.world_size,
     )
 
 
@@ -602,10 +735,11 @@ def main(argv: Sequence[str] | None = None) -> None:
 
         model = build_model().to(context.device)
         if context.distributed:
+            assert context.device_index is not None
             model = DistributedDataParallel(
                 model,
-                device_ids=[context.local_rank],
-                output_device=context.local_rank,
+                device_ids=[context.device_index],
+                output_device=context.device_index,
             )
 
         loss_function = DiceLoss(

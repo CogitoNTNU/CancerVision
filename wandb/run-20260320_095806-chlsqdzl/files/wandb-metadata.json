@@ -1,0 +1,17 @@
+{
+  "os":  "Windows-11-10.0.26200-SP0",
+  "python":  "CPython 3.13.11",
+  "startedAt":  "2026-03-20T08:58:06.207282Z",
+  "program":  "C:\\Users\\Polar\\Documents\\GitHub\\CancerVision\\main.py",
+  "codePath":  "main.py",
+  "codePathLocal":  "main.py",
+  "git":  {
+    "remote":  "https://github.com/CogitoNTNU/CancerVision.git",
+    "commit":  "43c45f000b515ed69ef3a6f7923bab1ae4037ff1"
+  },
+  "email":  "dev@cogito-ntnu.no",
+  "root":  "C:\\Users\\Polar\\Documents\\GitHub\\CancerVision",
+  "host":  "DESKTOP-0NVSU61",
+  "executable":  "C:\\Users\\Polar\\Documents\\GitHub\\CancerVision\\.venv\\Scripts\\python.exe",
+  "writerId":  "4fl6f62nv94jt3e4ahqg92wg56g7m906"
+}

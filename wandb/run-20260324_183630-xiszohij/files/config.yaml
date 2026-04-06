@@ -1,0 +1,57 @@
+_wandb:
+    value:
+        cli_version: 0.25.1
+        e:
+            ydwyn1badvtotixlltlaw2449x36izrx:
+                codePath: src\models\3d-classification.py
+                codePathLocal: src\models\3d-classification.py
+                cpu_count: 8
+                cpu_count_logical: 16
+                cudaVersion: "13.1"
+                disk:
+                    /:
+                        total: "1999509647360"
+                        used: "1507260448768"
+                email: dev@cogito-ntnu.no
+                executable: C:\Users\Polar\documents\GitHub\CancerVision\.venv\Scripts\python.exe
+                git:
+                    commit: 315521b44a711a15c03f40a55229591960f10d30
+                    remote: https://github.com/CogitoNTNU/CancerVision.git
+                gpu: NVIDIA GeForce RTX 4070 SUPER
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ada
+                      cudaCores: 7168
+                      memoryTotal: "12878610432"
+                      name: NVIDIA GeForce RTX 4070 SUPER
+                      uuid: GPU-3fc50187-c459-49dd-395a-065004571a38
+                host: DESKTOP-0NVSU61
+                memory:
+                    total: "33436323840"
+                os: Windows-11-10.0.26200-SP0
+                program: C:\Users\Polar\documents\GitHub\CancerVision\src\models\3d-classification.py
+                python: CPython 3.13.11
+                root: C:\Users\Polar\documents\GitHub\CancerVision
+                startedAt: "2026-03-24T17:36:30.818594Z"
+                writerId: ydwyn1badvtotixlltlaw2449x36izrx
+        m: []
+        python_version: 3.13.11
+        t:
+            "1":
+                - 1
+                - 10
+                - 41
+                - 48
+            "2":
+                - 1
+                - 10
+                - 41
+                - 48
+            "3":
+                - 13
+            "4": 3.13.11
+            "5": 0.25.1
+            "8":
+                - 3
+            "12": 0.25.1
+            "13": windows-amd64

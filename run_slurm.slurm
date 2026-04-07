@@ -6,8 +6,8 @@
 #SBATCH --gres=gpu:v100:1
 #SBATCH --mem=32G
 #SBATCH --nodes=1
-#SBATCH --output=slurm_outputs/output_combined.txt
-#SBATCH --error=slurm_outputs/output_combined.err
+#SBATCH --output=slurm_outputs/%x-%j.out
+#SBATCH --error=slurm_outputs/%x-%j.err
 #SBATCH --mail-user=eldarja@ntnu.no
 #SBATCH --mail-type=ALL
 

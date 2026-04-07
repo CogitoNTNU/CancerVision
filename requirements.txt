@@ -52,7 +52,7 @@ diskcache==5.6.3
     # via weave
 fickling==0.1.9
     # via polyfile-weave
-filelock==3.25.0
+filelock==3.25.2
     # via
     #   polyfile-weave
     #   torch

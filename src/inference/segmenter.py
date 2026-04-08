@@ -9,6 +9,26 @@ from src.core import load_checkpoint, resolve_device
 from src.segmentation.registry import get_segmentation_backend
 
 
+def _normalize_state_dict_keys(
+    state_dict: dict[str, torch.Tensor],
+) -> dict[str, torch.Tensor]:
+    """Normalize common training-time key prefixes for inference-time loading.
+
+    Handles checkpoints saved from:
+    - torch.compile models (keys prefixed with ``_orig_mod.``)
+    - DataParallel/DistributedDataParallel wrappers (``module.``)
+    """
+    normalized: dict[str, torch.Tensor] = {}
+    for key, value in state_dict.items():
+        k = key
+        if k.startswith("_orig_mod."):
+            k = k[len("_orig_mod.") :]
+        if k.startswith("module."):
+            k = k[len("module.") :]
+        normalized[k] = value
+    return normalized
+
+
 class SegmentationInferer:
     """Run segmentation inference for preprocessed 3D volumes."""
 
@@ -52,7 +72,8 @@ class SegmentationInferer:
             in_channels=resolved_in_channels,
             out_channels=resolved_out_channels,
         )
-        model.load_state_dict(checkpoint["model_state_dict"])
+        state_dict = _normalize_state_dict_keys(checkpoint["model_state_dict"])
+        model.load_state_dict(state_dict)
         return cls(
             model=model,
             roi_size=roi_size,

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from src.data.adapters.base import DatasetAdapter
 from src.data.adapters.brats import BratsAdapter
+from src.data.adapters.ixi import IxiAdapter
 
 _ADAPTERS: dict[str, DatasetAdapter] = {
     "brats": BratsAdapter(),
+    "ixi": IxiAdapter(),
 }
 
 

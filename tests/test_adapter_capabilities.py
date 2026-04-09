@@ -11,3 +11,15 @@ def test_brats_adapter_has_label_transform():
     adapter = get_dataset_adapter("brats")
     transform = adapter.get_segmentation_label_transform()
     assert transform is not None
+
+
+def test_ixi_adapter_channel_contract():
+    adapter = get_dataset_adapter("ixi")
+    assert adapter.get_input_channels() == 4
+    assert adapter.get_output_channels() == 3
+
+
+def test_ixi_adapter_has_no_label_transform():
+    adapter = get_dataset_adapter("ixi")
+    transform = adapter.get_segmentation_label_transform()
+    assert transform is None

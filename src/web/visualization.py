@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import os
 
-import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
 import torch
+
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 
 def create_preview_png(

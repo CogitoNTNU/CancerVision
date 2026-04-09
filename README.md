@@ -136,6 +136,10 @@ uv run main.py infer \
 `models` shows available segmentation backends (currently `monai_unet` and `nnunet` placeholder).
 `web` starts a barebones browser interface for inference and preview visualization.
 
+Supported dataset adapters now include:
+1. `brats`: sample path should point to a patient directory with the expected BraTS modalities.
+2. `ixi`: sample path can point to a single `.nii`/`.nii.gz` file (for example in `res/data/IXI-T2`) and web UI supports drag-and-drop upload for this dataset.
+
 For W&B logging, place `WANDB_API_KEY` (and optionally `WANDB_ENTITY`) in `.env`. Training commands load `.env` automatically.
 
 To add a new dataset format:

@@ -15,7 +15,7 @@
     <div class="alert error">{{ error }}</div>
     {% endif %}
 
-    <form method="post" action="/infer" class="panel">
+    <form method="post" action="/infer" class="panel" enctype="multipart/form-data">
       <div class="field">
         <label for="dataset">Dataset</label>
         <select id="dataset" name="dataset">
@@ -27,7 +27,20 @@
 
       <div class="field">
         <label for="sample_path">Sample Path</label>
-        <input id="sample_path" name="sample_path" type="text" placeholder="/abs/path/to/sample_dir" required>
+        <input id="sample_path" name="sample_path" type="text" placeholder="/abs/path/to/sample_dir">
+        <p class="muted">Use a patient directory for BraTS, or a single .nii/.nii.gz file path for IXI.</p>
+      </div>
+
+      <div class="field">
+        <label for="sample_file">Upload Sample File (IXI)</label>
+        <div id="drop_zone" class="drop-zone" role="button" tabindex="0" aria-label="Drag and drop an IXI NIfTI file or browse to select">
+          <p class="drop-zone-title">Drag and drop a NIfTI file here</p>
+          <p class="drop-zone-subtitle">or use Browse</p>
+          <input id="sample_file" name="sample_file" type="file" accept=".nii,.nii.gz,application/gzip">
+          <button id="browse_file_btn" class="secondary" type="button">Browse</button>
+          <p id="selected_file_name" class="muted">No file selected.</p>
+        </div>
+        <p id="dataset_help" class="muted">Upload is enabled for IXI. BraTS requires a sample directory path.</p>
       </div>
 
       <div class="field">
@@ -67,16 +80,23 @@
       <p><strong>Tumor Detected:</strong> {{ result.has_tumor }}</p>
       <p><strong>Segmentation Ran:</strong> {{ result.segmentation_ran }}</p>
       <p><strong>Positive Voxels:</strong> {{ result.positive_voxels }}</p>
+      <p><strong>Input Mode:</strong> {{ "uploaded file" if result.uploaded_file else "path" }}</p>
+      <p><strong>Sample Used:</strong> {{ result.sample_path }}</p>
+      <p><strong>Output Directory:</strong> {{ result.output_dir }}</p>
 
       <div class="preview">
         <img src="{{ result.preview_path }}" alt="inference preview">
       </div>
+      <p><a href="{{ result.preview_path }}" target="_blank" rel="noopener">Open preview image</a></p>
 
       {% if result.prediction_path %}
       <p><a href="{{ result.prediction_path }}">Download prediction NIfTI</a></p>
+      {% else %}
+      <p>No prediction file saved because classifier-gated segmentation did not run.</p>
       {% endif %}
     </section>
     {% endif %}
   </main>
+  <script src="/static/app.js"></script>
 </body>
 </html>

@@ -3,17 +3,50 @@
 from __future__ import annotations
 
 import argparse
-import os
 import uuid
 from pathlib import Path
 
 from flask import Flask, render_template, request
+from werkzeug.utils import secure_filename
 
 from src.classifier import HeuristicTumorClassifier, load_torch_classifier
 from src.data.registry import get_dataset_adapter, list_dataset_types
 from src.inference import InferenceService, SegmentationInferer
 from src.segmentation import list_segmentation_backends
 from src.web.visualization import create_preview_png
+
+
+def _project_root() -> Path:
+    """Return repository root regardless of the current working directory."""
+    return Path(__file__).resolve().parents[2]
+
+
+def _web_output_dir() -> Path:
+    """Directory used by the web app to store preview and prediction artifacts."""
+    return _project_root() / "res" / "output" / "web"
+
+
+def _is_nifti_filename(filename: str) -> bool:
+    lower = filename.lower()
+    return lower.endswith(".nii") or lower.endswith(".nii.gz")
+
+
+def _save_uploaded_nifti(sample_file, dataset: str) -> str:
+    filename = (sample_file.filename or "").strip()
+    if not filename or not _is_nifti_filename(filename):
+        raise ValueError("Uploaded file must be a .nii or .nii.gz file.")
+
+    safe_name = secure_filename(filename)
+    if not safe_name:
+        safe_name = f"upload_{uuid.uuid4().hex}.nii.gz"
+
+    upload_dir = _web_output_dir() / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    stored_name = f"{dataset}_{uuid.uuid4().hex[:10]}_{safe_name}"
+    stored_path = upload_dir / stored_name
+    sample_file.save(str(stored_path))
+    return str(stored_path.resolve())
 
 
 def _build_inference_service(
@@ -65,18 +98,64 @@ def create_app() -> Flask:
         segmentation_checkpoint = request.form.get("segmentation_checkpoint", "").strip()
         model_backend = request.form.get("model_backend", "").strip() or None
         classifier_checkpoint = request.form.get("classifier_checkpoint", "").strip() or None
-        classifier_threshold = float(request.form.get("classifier_threshold", "0.5"))
+        threshold_raw = request.form.get("classifier_threshold", "0.5").strip().replace(",", ".")
+        sample_file = request.files.get("sample_file")
+        has_uploaded_file = bool(sample_file and (sample_file.filename or "").strip())
 
-        if not sample_path or not segmentation_checkpoint:
+        try:
+            classifier_threshold = float(threshold_raw)
+        except ValueError:
             return render_template(
                 "index.html",
                 datasets=list_dataset_types(),
                 backends=list_segmentation_backends(),
                 result=None,
-                error="sample_path and segmentation_checkpoint are required.",
+                error="classifier_threshold must be a number between 0 and 1.",
+            )
+
+        if not 0.0 <= classifier_threshold <= 1.0:
+            return render_template(
+                "index.html",
+                datasets=list_dataset_types(),
+                backends=list_segmentation_backends(),
+                result=None,
+                error="classifier_threshold must be between 0 and 1.",
+            )
+
+        if not segmentation_checkpoint:
+            return render_template(
+                "index.html",
+                datasets=list_dataset_types(),
+                backends=list_segmentation_backends(),
+                result=None,
+                error="segmentation_checkpoint is required.",
+            )
+
+        if not sample_path and not has_uploaded_file:
+            return render_template(
+                "index.html",
+                datasets=list_dataset_types(),
+                backends=list_segmentation_backends(),
+                result=None,
+                error="Provide either sample_path or an uploaded NIfTI file.",
+            )
+
+        if has_uploaded_file and dataset != "ixi":
+            return render_template(
+                "index.html",
+                datasets=list_dataset_types(),
+                backends=list_segmentation_backends(),
+                result=None,
+                error=(
+                    "File upload is currently supported for dataset 'ixi'. "
+                    "For 'brats', provide sample_path as the patient directory path."
+                ),
             )
 
         try:
+            if has_uploaded_file and sample_file is not None:
+                sample_path = _save_uploaded_nifti(sample_file, dataset=dataset)
+
             adapter = get_dataset_adapter(dataset)
             service, classifier_name = _build_inference_service(
                 classifier_checkpoint=classifier_checkpoint,
@@ -89,7 +168,7 @@ def create_app() -> Flask:
             image = adapter.load_inference_image(sample_path)
             result = service.run_tensor(image)
 
-            output_dir = Path("res") / "predictions" / "web"
+            output_dir = _web_output_dir()
             output_dir.mkdir(parents=True, exist_ok=True)
             run_id = uuid.uuid4().hex[:10]
 
@@ -120,6 +199,9 @@ def create_app() -> Flask:
                 "has_tumor": result.has_tumor,
                 "segmentation_ran": result.segmentation_mask is not None,
                 "positive_voxels": int(result.segmentation_mask.sum().item()) if result.segmentation_mask is not None else 0,
+                "output_dir": str(output_dir),
+                "sample_path": sample_path,
+                "uploaded_file": has_uploaded_file,
                 "preview_path": f"/results/{preview_filename}",
                 "prediction_path": f"/results/{prediction_filename}" if prediction_filename else None,
             }
@@ -144,7 +226,7 @@ def create_app() -> Flask:
     def result_file(filename: str):
         from flask import send_from_directory
 
-        return send_from_directory(Path("res") / "predictions" / "web", filename)
+        return send_from_directory(_web_output_dir(), filename)
 
     return app
 

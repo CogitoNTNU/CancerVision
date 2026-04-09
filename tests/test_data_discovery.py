@@ -12,3 +12,9 @@ def test_brats_adapter_is_registered():
     assert "brats" in list_dataset_types()
     adapter = get_dataset_adapter("brats")
     assert adapter.name == "brats"
+
+
+def test_ixi_adapter_is_registered():
+    assert "ixi" in list_dataset_types()
+    adapter = get_dataset_adapter("ixi")
+    assert adapter.name == "ixi"

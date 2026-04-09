@@ -32,6 +32,12 @@ h1 {
   margin-bottom: 12px;
 }
 
+.muted {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #666;
+}
+
 label {
   display: block;
   font-size: 14px;
@@ -56,6 +62,65 @@ button {
 
 button:hover {
   background: #1858ba;
+}
+
+.secondary {
+  width: auto;
+  display: inline-block;
+  margin-top: 8px;
+  background: #fff;
+  color: #1f6feb;
+  border: 1px solid #1f6feb;
+}
+
+.secondary:hover {
+  background: #eef4ff;
+}
+
+.secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.drop-zone {
+  position: relative;
+  border: 2px dashed #9bb8e6;
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+  background: #f8fbff;
+  transition: background-color 120ms ease, border-color 120ms ease;
+  cursor: pointer;
+}
+
+.drop-zone.drag-over {
+  border-color: #1f6feb;
+  background: #eaf2ff;
+}
+
+.drop-zone.disabled {
+  border-style: solid;
+  background: #f2f2f2;
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.drop-zone-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.drop-zone-subtitle {
+  margin: 4px 0 0;
+  color: #666;
+}
+
+#sample_file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .alert.error {

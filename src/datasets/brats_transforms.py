@@ -1,5 +1,9 @@
 """Custom MONAI transforms for BraTS brain tumor segmentation."""
 
+from __future__ import annotations
+
+from collections.abc import Hashable, Mapping
+
 import torch
 from monai.transforms import MapTransform
 
@@ -23,4 +27,14 @@ class ConvertToMultiChannelBasedOnBratsClassesd(MapTransform):
             wt = torch.logical_or(tc, label == 2)
             et = label == 4
             d[key] = torch.stack([tc, wt, et], dim=0).float()
+        return d
+
+
+class EnsureFloatLabeld(MapTransform):
+    """Cast label tensors to float while preserving channel structure."""
+
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]):
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = d[key].float()
         return d

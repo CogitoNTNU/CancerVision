@@ -220,6 +220,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+!logs/
+!logs/training/
+!logs/training/*.log
 
 # Dependency directories
 node_modules/
@@ -254,8 +257,10 @@ lerna-debug.log
 Thumbs.db
 
 # Training dataset
-res/HNTSMRG24_train/
-
-# Testing dataset
 res/dataset/*
 res/data/*
+
+# Testing
+src/test.py
+
+wandb/*

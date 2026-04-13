@@ -5,7 +5,7 @@
 #SBATCH --partition=GPUQ
 #SBATCH --job-name="dynunet-brats"
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:h100:1
+#SBATCH --gres=gpu:a100:2
 #SBATCH --mem=64G
 #SBATCH --cpus-per-task=4
 #SBATCH --output=slurm_terminal.out
@@ -22,9 +22,6 @@ echo "Name of job: ${SLURM_JOB_NAME:-dynunet-brats}"
 echo "ID of job: ${SLURM_JOB_ID:-local}"
 echo "The job was run on these nodes: ${SLURM_JOB_NODELIST:-local-node}"
 
-module purge
-module load CUDA/12.4.0
-module load cuDNN/9.1.0-CUDA-12.4.0
 
 if [ ! -x "${WORKDIR}/.venv/bin/python" ]; then
   echo "Missing ${WORKDIR}/.venv/bin/python. Create the environment on the login node first."

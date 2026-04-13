@@ -5,7 +5,7 @@
 #SBATCH --partition=GPUQ
 #SBATCH --job-name="dynunet-brats"
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:a100:2
+#SBATCH --gres=gpu:a100:1
 #SBATCH --mem=64G
 #SBATCH --cpus-per-task=4
 #SBATCH --output=slurm_terminal.out

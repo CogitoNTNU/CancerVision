@@ -89,6 +89,15 @@ class NoOpWandbRun:
         return None
 
 
+def normalize_wandb_mode(raw_value: str) -> str:
+    value = raw_value.strip().replace("\r", "").replace("\n", "").lower()
+    if value not in {"online", "offline", "disabled"}:
+        raise argparse.ArgumentTypeError(
+            "expected one of: online, offline, disabled"
+        )
+    return value
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Train a MONAI DynUNet on BraTS2020 NIfTI volumes"
@@ -191,7 +200,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--wandb-mode",
-        choices=("online", "offline", "disabled"),
+        type=normalize_wandb_mode,
         default="online",
         help="Weights & Biases logging mode",
     )

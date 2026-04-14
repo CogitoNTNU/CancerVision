@@ -60,6 +60,10 @@ echo "MASTER_ADDR=${MASTER_ADDR}"
 echo "MASTER_PORT=${MASTER_PORT}"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
 
+WANDB_MODE_CLEAN="${WANDB_MODE:-online}"
+WANDB_MODE_CLEAN="${WANDB_MODE_CLEAN//$'\r'/}"
+WANDB_MODE_CLEAN="${WANDB_MODE_CLEAN//$'\n'/}"
+
 nvidia-smi
 
 srun --ntasks="${GPU_COUNT}" --ntasks-per-node="${GPU_COUNT}" --gpus-per-task=1 \
@@ -67,7 +71,7 @@ srun --ntasks="${GPU_COUNT}" --ntasks-per-node="${GPU_COUNT}" --gpus-per-task=1 
   --batch-size 1 \
   --num-samples 4 \
   --roi-size 128 128 128 \
-  --wandb-mode "${WANDB_MODE:-online}" \
+  --wandb-mode "${WANDB_MODE_CLEAN}" \
   --run-name "dynunet-brats-${SLURM_JOB_ID:-local}" \
   --data-dir /cluster/home/eldarja/CancerVision/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData
 

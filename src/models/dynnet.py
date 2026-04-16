@@ -52,7 +52,7 @@ DEFAULT_DATA_DIR = REPO_ROOT / "res" / "dataset" / "BraTS2020_TrainingData" / "M
 DEFAULT_SAVE_DIR = REPO_ROOT / "res" / "models"
 WANDB_PROJECT = "cancervision"
 WANDB_ENTITY = os.getenv("WANDB_ENTITY", "cancervision")
-DEFAULT_SW_BATCH_SIZE = 4
+DEFAULT_VAL_SW_BATCH_SIZE = 1
 
 
 @dataclass
@@ -142,10 +142,25 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Number of random crops per volume per iteration",
     )
     parser.add_argument(
+        "--train-micro-batch-size",
+        type=int,
+        default=1,
+        help=(
+            "Maximum samples/crops per optimizer micro-step after MONAI collation. "
+            "Use 1 to reduce CUDA memory pressure for 3D volumes."
+        ),
+    )
+    parser.add_argument(
         "--amp",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Enable CUDA AMP during training and validation",
+    )
+    parser.add_argument(
+        "--val-sw-batch-size",
+        type=int,
+        default=DEFAULT_VAL_SW_BATCH_SIZE,
+        help="Sliding-window batch size used during validation inference",
     )
     parser.add_argument(
         "--wandb-mode",
@@ -495,6 +510,19 @@ def get_autocast_context(context: RuntimeContext, enabled: bool) -> contextlib.A
     return contextlib.nullcontext()
 
 
+def build_micro_batch_slices(total_batch_size: int, requested_micro_batch_size: int) -> list[slice]:
+    if total_batch_size < 1:
+        raise ValueError("total_batch_size must be at least 1")
+    if requested_micro_batch_size < 1:
+        raise ValueError("requested_micro_batch_size must be at least 1")
+
+    micro_batch_size = min(total_batch_size, requested_micro_batch_size)
+    return [
+        slice(start, min(start + micro_batch_size, total_batch_size))
+        for start in range(0, total_batch_size, micro_batch_size)
+    ]
+
+
 def reduce_mean(value: float, count: int, context: RuntimeContext) -> float:
     if not context.distributed:
         return value / max(count, 1)
@@ -585,25 +613,46 @@ def train_one_epoch(
         step_count += 1
         inputs = batch_data["image"].to(context.device, non_blocking=True)
         labels = batch_data["label"].to(context.device, non_blocking=True)
+        micro_batch_slices = build_micro_batch_slices(
+            total_batch_size=inputs.shape[0],
+            requested_micro_batch_size=args.train_micro_batch_size,
+        )
 
         optimizer.zero_grad(set_to_none=True)
-        with get_autocast_context(context, should_use_amp(args, context)):
-            outputs = model(inputs)
-            loss = loss_function(outputs, labels)
+        loss = None
+        step_loss = 0.0
+        # MONAI collates `num_samples` crops into batch dimension; split them to cap activation memory.
+        for batch_slice in micro_batch_slices:
+            micro_inputs = inputs[batch_slice]
+            micro_labels = labels[batch_slice]
+            micro_weight = micro_inputs.shape[0] / inputs.shape[0]
+
+            with get_autocast_context(context, should_use_amp(args, context)):
+                outputs = model(micro_inputs)
+                micro_loss = loss_function(outputs, micro_labels)
+                scaled_loss = micro_loss * micro_weight
+
+            step_loss += micro_loss.item() * micro_weight
+            if scaler is not None:
+                scaler.scale(scaled_loss).backward()
+            else:
+                scaled_loss.backward()
+            loss = micro_loss
+
+        if loss is None:
+            raise RuntimeError("Training batch produced no micro-batches.")
 
         if scaler is not None:
-            scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
         else:
-            loss.backward()
             optimizer.step()
 
-        epoch_loss += loss.item()
+        epoch_loss += step_loss
         if is_main_process(context) and step % 10 == 0:
             print(
                 f"  step {step}/{len(train_loader)}"
-                f"  train_loss: {loss.item():.4f}"
+                f"  train_loss: {step_loss:.4f}"
                 f"  step_time: {time.time() - step_start:.2f}s",
                 flush=True,
             )
@@ -638,7 +687,7 @@ def validate(
                 val_outputs = sliding_window_inference(
                     val_inputs,
                     roi_size=roi_size,
-                    sw_batch_size=DEFAULT_SW_BATCH_SIZE,
+                    sw_batch_size=args.val_sw_batch_size,
                     predictor=predictor,
                     overlap=0.5,
                 )
@@ -662,6 +711,10 @@ def validate(
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
+    if args.train_micro_batch_size < 1:
+        raise ValueError("--train-micro-batch-size must be at least 1")
+    if args.val_sw_batch_size < 1:
+        raise ValueError("--val-sw-batch-size must be at least 1")
     context = setup_device_and_distributed()
 
     run_name = build_run_name(args)
@@ -683,6 +736,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         data_dir = os.path.normpath(args.data_dir)
         rank0_print(context, f"Data directory : {data_dir}")
         rank0_print(context, f"Exists         : {os.path.isdir(data_dir)}")
+        rank0_print(context, f"Train micro-batch size: {args.train_micro_batch_size}")
+        rank0_print(context, f"Validation sw_batch_size: {args.val_sw_batch_size}")
 
         data_dicts = build_data_dicts(data_dir)
         rank0_print(context, f"Total patients : {len(data_dicts)}")
@@ -786,8 +841,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             "seed": args.seed,
             "roi_size": list(roi_size),
             "num_samples": args.num_samples,
+            "train_micro_batch_size": args.train_micro_batch_size,
             "test_size": args.test_size,
             "amp": args.amp,
+            "val_sw_batch_size": args.val_sw_batch_size,
             "distributed": context.distributed,
             "world_size": context.world_size,
         }

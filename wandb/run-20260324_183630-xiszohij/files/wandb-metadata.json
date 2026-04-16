@@ -1,0 +1,40 @@
+{
+  "os": "Windows-11-10.0.26200-SP0",
+  "python": "CPython 3.13.11",
+  "startedAt": "2026-03-24T17:36:30.818594Z",
+  "program": "C:\\Users\\Polar\\documents\\GitHub\\CancerVision\\src\\models\\3d-classification.py",
+  "codePath": "src\\models\\3d-classification.py",
+  "codePathLocal": "src\\models\\3d-classification.py",
+  "git": {
+    "remote": "https://github.com/CogitoNTNU/CancerVision.git",
+    "commit": "315521b44a711a15c03f40a55229591960f10d30"
+  },
+  "email": "dev@cogito-ntnu.no",
+  "root": "C:\\Users\\Polar\\documents\\GitHub\\CancerVision",
+  "host": "DESKTOP-0NVSU61",
+  "executable": "C:\\Users\\Polar\\documents\\GitHub\\CancerVision\\.venv\\Scripts\\python.exe",
+  "cpu_count": 8,
+  "cpu_count_logical": 16,
+  "gpu": "NVIDIA GeForce RTX 4070 SUPER",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "1999509647360",
+      "used": "1507260448768"
+    }
+  },
+  "memory": {
+    "total": "33436323840"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA GeForce RTX 4070 SUPER",
+      "memoryTotal": "12878610432",
+      "cudaCores": 7168,
+      "architecture": "Ada",
+      "uuid": "GPU-3fc50187-c459-49dd-395a-065004571a38"
+    }
+  ],
+  "cudaVersion": "13.1",
+  "writerId": "ydwyn1badvtotixlltlaw2449x36izrx"
+}

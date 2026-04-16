@@ -264,3 +264,4 @@ res/data/*
 src/test.py
 
 wandb/*
+*/dataset-copy/*

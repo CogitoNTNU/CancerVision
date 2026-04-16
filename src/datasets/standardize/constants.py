@@ -1,0 +1,124 @@
+"""Constants for mixed MRI dataset standardization."""
+
+from __future__ import annotations
+
+STANDARDIZED_DATASET_DEFAULT_ROOT = r"Z:\dataset\cancervision-standardized"
+STANDARDIZED_MANIFESTS_DEFAULT_ROOT = (
+    rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\manifests"
+)
+STANDARDIZED_TASK_MANIFESTS_DEFAULT_ROOT = (
+    rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\task_manifests"
+)
+
+BRAIN_STRUCTURE_DATASET_KEY = "brain_structure"
+UPENN_GBM_DATASET_KEY = "upenn_gbm"
+UCSF_PDGM_DATASET_KEY = "ucsf_pdgm"
+REMIND_DATASET_KEY = "remind"
+YALE_BRAIN_METS_LONGITUDINAL_DATASET_KEY = "yale_brain_mets_longitudinal"
+UTSW_GLIOMA_DATASET_KEY = "utsw_glioma"
+UCSD_PTGBM_DATASET_KEY = "ucsd_ptgbm"
+CFB_GBM_DATASET_KEY = "cfb_gbm"
+VESTIBULAR_SCHWANNOMA_MC_RC2_DATASET_KEY = "vestibular_schwannoma_mc_rc2"
+
+BRAIN_STRUCTURE_DEFAULT_ROOT = r"Z:\dataset\brain-structure"
+BRAIN_STRUCTURE_SOURCE_MANIFEST_DEFAULT = (
+    rf"{STANDARDIZED_MANIFESTS_DEFAULT_ROOT}\brain_structure_source_manifest.csv"
+)
+BRAIN_STRUCTURE_STANDARDIZED_DEFAULT_ROOT = (
+    rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\brain_structure"
+)
+BRAIN_STRUCTURE_PREPROC_PROFILE = "brain_structure_affine_mni_to_cls128"
+BRAIN_STRUCTURE_CLASSIFICATION_OUTPUT = "cls/t1_128.nii.gz"
+BRAIN_STRUCTURE_MASK_OUTPUT = "cls/brain_mask_128.nii.gz"
+
+UPENN_GBM_DEFAULT_ROOT = r"Z:\dataset\PKG - UPENN-GBM-NIfTI"
+UPENN_GBM_SOURCE_MANIFEST_DEFAULT = (
+    rf"{STANDARDIZED_MANIFESTS_DEFAULT_ROOT}\upenn_gbm_source_manifest.csv"
+)
+UPENN_GBM_STANDARDIZED_DEFAULT_ROOT = (
+    rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\upenn_gbm"
+)
+UPENN_GBM_PREPROC_PROFILE = "upenn_gbm_cls128"
+UPENN_GBM_SEG_PREPROC_PROFILE = "upenn_gbm_native_anchor_to_seg"
+
+UCSF_PDGM_DEFAULT_ROOT = r"Z:\dataset\UCSF-PDGM-v5"
+UCSF_PDGM_SOURCE_MANIFEST_DEFAULT = (
+    rf"{STANDARDIZED_MANIFESTS_DEFAULT_ROOT}\ucsf_pdgm_source_manifest.csv"
+)
+UCSF_PDGM_STANDARDIZED_DEFAULT_ROOT = (
+    rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\ucsf_pdgm"
+)
+UCSF_PDGM_PREPROC_PROFILE = "ucsf_pdgm_cls128"
+UCSF_PDGM_SEG_PREPROC_PROFILE = "ucsf_pdgm_native_anchor_to_seg"
+
+CFB_GBM_DEFAULT_ROOT = r"Z:\dataset\PKG - CFB-GBM version 1\CFB-GBM"
+CFB_GBM_SOURCE_MANIFEST_DEFAULT = (
+    rf"{STANDARDIZED_MANIFESTS_DEFAULT_ROOT}\cfb_gbm_source_manifest.csv"
+)
+CFB_GBM_STANDARDIZED_DEFAULT_ROOT = (
+    rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\cfb_gbm"
+)
+CFB_GBM_PREPROC_PROFILE = "cfb_gbm_cls128"
+CFB_GBM_SEG_PREPROC_PROFILE = "cfb_gbm_native_anchor_to_seg"
+
+UCSD_PTGBM_DEFAULT_ROOT = r"Z:\dataset\UCSD-PTGBM"
+UCSD_PTGBM_SOURCE_MANIFEST_DEFAULT = (
+    rf"{STANDARDIZED_MANIFESTS_DEFAULT_ROOT}\ucsd_ptgbm_source_manifest.csv"
+)
+UCSD_PTGBM_STANDARDIZED_DEFAULT_ROOT = (
+    rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\ucsd_ptgbm"
+)
+UCSD_PTGBM_PREPROC_PROFILE = "ucsd_ptgbm_cls128"
+UCSD_PTGBM_SEG_PREPROC_PROFILE = "ucsd_ptgbm_native_anchor_to_seg"
+
+REMIND_DEFAULT_ROOT = r"Z:\dataset\remind"
+REMIND_MASKS_DEFAULT_ROOT = (
+    r"Z:\dataset\PKG - ReMIND_NRRD_Seg_Sep_2023\ReMIND_NRRD_Seg_Sep_2023"
+)
+REMIND_SOURCE_MANIFEST_DEFAULT = (
+    rf"{STANDARDIZED_MANIFESTS_DEFAULT_ROOT}\remind_source_manifest.csv"
+)
+REMIND_STANDARDIZED_DEFAULT_ROOT = (
+    rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\remind"
+)
+REMIND_PREPROC_PROFILE = "remind_cls128"
+REMIND_SEG_PREPROC_PROFILE = "remind_native_anchor_to_seg"
+
+YALE_BRAIN_METS_LONGITUDINAL_DEFAULT_ROOT = (
+    r"Z:\dataset\PKG - Yale-Brain-Mets-Longitudinal\Yale-Brain-Mets-Longitudinal"
+)
+YALE_BRAIN_METS_LONGITUDINAL_SOURCE_MANIFEST_DEFAULT = (
+    rf"{STANDARDIZED_MANIFESTS_DEFAULT_ROOT}\yale_brain_mets_longitudinal_source_manifest.csv"
+)
+YALE_BRAIN_METS_LONGITUDINAL_STANDARDIZED_DEFAULT_ROOT = (
+    rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\yale_brain_mets_longitudinal"
+)
+YALE_BRAIN_METS_LONGITUDINAL_PREPROC_PROFILE = (
+    "yale_brain_mets_longitudinal_cls128"
+)
+
+UTSW_GLIOMA_DEFAULT_ROOT = r"Z:\dataset\UTSW-Glioma"
+UTSW_GLIOMA_SOURCE_MANIFEST_DEFAULT = (
+    rf"{STANDARDIZED_MANIFESTS_DEFAULT_ROOT}\utsw_glioma_source_manifest.csv"
+)
+UTSW_GLIOMA_STANDARDIZED_DEFAULT_ROOT = (
+    rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\utsw_glioma"
+)
+UTSW_GLIOMA_PREPROC_PROFILE = "utsw_glioma_cls128"
+UTSW_GLIOMA_SEG_PREPROC_PROFILE = "utsw_glioma_native_anchor_to_seg"
+
+VESTIBULAR_SCHWANNOMA_MC_RC2_DEFAULT_ROOT = (
+    r"Z:\dataset\Vestibular-Schwannoma-MC-RC2_Oct2025"
+)
+VESTIBULAR_SCHWANNOMA_MC_RC2_SOURCE_MANIFEST_DEFAULT = (
+    rf"{STANDARDIZED_MANIFESTS_DEFAULT_ROOT}\vestibular_schwannoma_mc_rc2_source_manifest.csv"
+)
+VESTIBULAR_SCHWANNOMA_MC_RC2_STANDARDIZED_DEFAULT_ROOT = (
+    rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\vestibular_schwannoma_mc_rc2"
+)
+VESTIBULAR_SCHWANNOMA_MC_RC2_PREPROC_PROFILE = (
+    "vestibular_schwannoma_mc_rc2_cls128"
+)
+VESTIBULAR_SCHWANNOMA_MC_RC2_SEG_PREPROC_PROFILE = (
+    "vestibular_schwannoma_mc_rc2_native_anchor_to_seg"
+)

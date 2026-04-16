@@ -1,115 +1,96 @@
-#!/bin/sh
+#!/bin/bash
 #SBATCH --account=studiegrupper-cogito
-#SBATCH --job-name="Cancer Vision UNet 2D"
-#SBATCH --time=00:00:05
+#SBATCH --job-name="Cancer Vision UNet 3D"
+#SBATCH --time=01:00:00
 #SBATCH --partition=GPUQ
 #SBATCH --gres=gpu:v100:1
-#SBATCH --mem=32GB
+#SBATCH --mem=32G
 #SBATCH --nodes=1
-#SBATCH --output=slurm_outputs/output_combined.txt
-#SBATCH --error=slurm_outputs/output_combined.err
+#SBATCH --output=slurm_outputs/%x-%j.out
+#SBATCH --error=slurm_outputs/%x-%j.err
 #SBATCH --mail-user=eldarja@ntnu.no
 #SBATCH --mail-type=ALL
 
-WORKDIR=${SLURM_SUBMIT_DIR}
-cd ${WORKDIR}
-echo "Running from this directory: $SLURM_SUBMIT_DIR"
-echo "Name of job: $SLURM_JOB_NAME"
-echo "ID of job: $SLURM_JOB_ID"
-echo "The job was run on these nodes: $SLURM_JOB_NODELIST"
+set -euo pipefail
 
+WORKDIR="${SLURM_SUBMIT_DIR}"
+PROJECT_DIR="${WORKDIR}/CancerVision"
 
-# CONFIG
-BRANCH="2d-segmentation"
+BRANCH="3d-segmentation"
 PULL_ON_RUN=true
-SYNC_ON_RUN=false
 
-ENV_PATH="/cluster/home/$(whoami)/CancerVision"
+echo "Running from: ${WORKDIR}"
+echo "Job name: ${SLURM_JOB_NAME}"
+echo "Job id: ${SLURM_JOB_ID}"
+echo "Nodes: ${SLURM_JOB_NODELIST}"
 
+cd "${PROJECT_DIR}"
 
-# TODO: Add wrapper script to chmod +x and run this script with a single command, e.g. `./run_slurm.sh`
-
-# Change to project directory
-cd "CancerVision"
-
-
-# Switch to the correct branch if not already on it
-currentBranch=$(git rev-parse --abbrev-ref HEAD)
-if [ "$currentBranch" != "$BRANCH" ]; then
-    echo "Switching to branch $BRANCH..."
-    git checkout $BRANCH
-else 
-    echo "Already on branch $BRANCH"
+if [ "${PULL_ON_RUN}" = true ]; then
+  git fetch origin "${BRANCH}"
+  git reset --hard "origin/${BRANCH}"
+  chmod +x run_slurm.slurm
 fi
 
+# Cluster GPU runtime
+module purge
+module load CUDA/12.4.0
+module load cuDNN/9.1.0-CUDA-12.4.0
 
-# Pull latest changes if PULL_ON_RUN is true
-if [ "$PULL_ON_RUN" = true ]; then
-    echo "Fetching latest changes from GitHub..."
-    git fetch origin $BRANCH
-    git reset --hard origin/$BRANCH
+export PATH="$HOME/.local/bin:$PATH"
+uv --version
 
-    # Elevate perms of new run file
-    chmod +x run_slurm.slurm
+# Reproducible env from lock
+uv sync --frozen
+
+# Add uv-managed NVIDIA libs to linker path
+SITE_PACKAGES="$(uv run python -c 'import site; print(site.getsitepackages()[0])')"
+for d in \
+  "$SITE_PACKAGES/nvidia/cudnn/lib" \
+  "$SITE_PACKAGES/nvidia/cublas/lib" \
+  "$SITE_PACKAGES/nvidia/cuda_runtime/lib" \
+  "$SITE_PACKAGES/nvidia/cusparse/lib" \
+  "$SITE_PACKAGES/nvidia/cufft/lib" \
+  "$SITE_PACKAGES/nvidia/curand/lib" \
+  "$SITE_PACKAGES/nvidia/nccl/lib"
+do
+  [ -d "$d" ] && export LD_LIBRARY_PATH="$d:${LD_LIBRARY_PATH:-}"
+done
+
+# Also add module-provided libs (if defined)
+[ -n "${EBROOTCUDNN:-}" ] && export LD_LIBRARY_PATH="${EBROOTCUDNN}/lib64:${LD_LIBRARY_PATH:-}"
+[ -n "${EBROOTCUDA:-}" ] && export LD_LIBRARY_PATH="${EBROOTCUDA}/lib64:${LD_LIBRARY_PATH:-}"
+
+echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
+
+# Hard fail early if libcudnn.so.9 still missing
+if ! ldconfig -p 2>/dev/null | grep -q "libcudnn.so.9"; then
+  if ! find "${PROJECT_DIR}/.venv" -name "libcudnn.so.9*" | grep -q .; then
+    echo "ERROR: libcudnn.so.9 not found in linker cache or .venv."
+    echo "Check that torch CUDA deps are installed in uv.lock."
+    exit 1
+  fi
 fi
 
+if [ -f "${WORKDIR}/.env" ]; then
+  set -a
+  source <(grep -v '^#' "${WORKDIR}/.env" | grep -v '^$')
+  set +a
+fi
 
+<<<<<<< HEAD
+export PYTHONPATH="${WORKDIR}:${PYTHONPATH:-}"
 
+echo "================================================"
+nvidia-smi
+echo "================================================"
+uv run python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'}')"
+=======
 # # Load required modules
 # module purge
 # module load Anaconda3/2024.02-1
+>>>>>>> main
 
-# # Create conda environment only if it doesn't exist
-# if [ ! -d "${ENV_PATH}" ]; then
-#     echo "Creating new conda environment..."
-#     conda create -y --prefix ${ENV_PATH} python=3.11
-# else
-#     echo "Conda environment already exists, skipping creation."
-# fi
+uv run python main.py
 
-# # Activate the environment
-# source activate ${ENV_PATH}
-
-# # Load environment variables from .env file (ignore comments and empty lines)
-# if [ -f "${WORKDIR}/.env" ]; then
-#     echo "Loading environment variables from .env..."
-#     set -a  # Automatically export all variables
-#     source <(grep -v '^#' ${WORKDIR}/.env | grep -v '^$')
-#     set +a
-# else
-#     echo "Warning: .env file not found. W&B logging may not work."
-# fi
-
-# # Add project root to Python path so 'src' can be found as a module
-# export PYTHONPATH="${WORKDIR}:${PYTHONPATH}"
-# echo "PYTHONPATH set to: ${PYTHONPATH}"
-
-# # Enable headless rendering for MuJoCo (EGL backend)
-# export MUJOCO_GL=egl
-# export PYOPENGL_PLATFORM=egl
-
-# # Install/update dependencies
-# echo "Installing/updating dependencies..."
-# pip install -r requirements.txt
-
-# echo "Installed packages:"
-# pip freeze
-
-# # Check GPU info
-# echo "================================================"
-# echo "GPU Information:"
-# echo "================================================"
-# nvidia-smi
-# echo ""
-# echo "PyTorch CUDA availability:"
-# python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
-# echo "================================================"
-# echo ""
-
-# # Run the training script
-# python main.py
-
-# # Deactivate the environment
-# conda deactivate
-
-# echo "Job finished"
+echo "Job finished"

@@ -262,3 +262,5 @@ res/data/*
 
 # Testing
 src/test.py
+
+wandb/*

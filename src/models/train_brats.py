@@ -1,55 +1,18 @@
 #!/usr/bin/env python
-"""Standalone BraTS2020 3D U-Net training script for SLURM / SSH execution.
+"""Compatibility wrapper for the DynUNet BraTS trainer."""
 
-Trains a 3D U-Net on BraTS2020 NIfTI volumes (flair, t1, t1ce, t2 + seg).
-Uses MONAI transforms, sliding-window inference, and per-channel Dice tracking.
+from __future__ import annotations
 
-Usage:
-    python train_brats.py [OPTIONS]
-    torchrun --nproc_per_node=2 main.py [OPTIONS]
-"""
-
-import argparse
-import os
-import subprocess
 import sys
-import time
-from collections.abc import Mapping
-from dataclasses import dataclass
+from pathlib import Path
+from typing import Sequence
 
-import torch
-import torch.distributed as dist
-import wandb
-from sklearn.model_selection import train_test_split
-from torch.nn.parallel import DistributedDataParallel
-from torch.utils.data.distributed import DistributedSampler
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-from monai.config import print_config
-from monai.data import DataLoader, Dataset, decollate_batch, list_data_collate
-from monai.inferers import sliding_window_inference
-from monai.losses import DiceLoss
-from monai.metrics import DiceMetric
-from monai.networks.nets import UNet
-from monai.transforms import (
-    Activations,
-    AsDiscrete,
-    Compose,
-    EnsureChannelFirstd,
-    LoadImaged,
-    NormalizeIntensityd,
-    RandCropByPosNegLabeld,
-    RandFlipd,
-    RandScaleIntensityd,
-    RandShiftIntensityd,
-)
-from monai.utils import set_determinism
+from src.models import dynnet  # noqa: E402
 
-# ---------------------------------------------------------------------------
-# Ensure the src package is importable (needed for custom transforms)
-# ---------------------------------------------------------------------------
-_src_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
-if _src_dir not in sys.path:
-    sys.path.insert(0, _src_dir)
 
 from datasets import ConvertToMultiChannelBasedOnBratsClassesd  # noqa: E402
 

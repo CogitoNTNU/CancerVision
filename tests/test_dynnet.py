@@ -5,7 +5,12 @@ from collections import ChainMap
 
 import torch
 
-from src.models.dynnet import build_model, resolve_distributed_launch_config
+from src.models.dynnet import (
+    build_micro_batch_slices,
+    build_model,
+    parse_args,
+    resolve_distributed_launch_config,
+)
 
 
 class DynnetSmokeTests(unittest.TestCase):
@@ -29,6 +34,22 @@ class DynnetSmokeTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertIn("DynUNet", result.stdout)
+
+    def test_parse_args_defaults_include_memory_safe_batching(self) -> None:
+        args = parse_args([])
+
+        self.assertEqual(args.train_micro_batch_size, 1)
+        self.assertEqual(args.val_sw_batch_size, 1)
+
+    def test_build_micro_batch_slices_splits_effective_batch(self) -> None:
+        slices = build_micro_batch_slices(total_batch_size=4, requested_micro_batch_size=1)
+
+        self.assertEqual(slices, [slice(0, 1), slice(1, 2), slice(2, 3), slice(3, 4)])
+
+    def test_build_micro_batch_slices_clamps_large_requests(self) -> None:
+        slices = build_micro_batch_slices(total_batch_size=3, requested_micro_batch_size=8)
+
+        self.assertEqual(slices, [slice(0, 3)])
 
 
 class DistributedLaunchConfigTests(unittest.TestCase):

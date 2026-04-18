@@ -1,11 +1,12 @@
 #!/bin/bash
 #SBATCH --account=studiegrupper-cogito
-#SBATCH --time=14:15:00
+#SBATCH --time=24:00:00
 #SBATCH --partition=GPUQ
 #SBATCH --job-name="dynunet-cancervision-native"
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:a100:1
+#SBATCH --constraint=gpu80g
 #SBATCH --mem=64G
 #SBATCH --cpus-per-task=8
 #SBATCH --output=slurm_outputs/%x-%j.out
@@ -53,50 +54,24 @@ WANDB_MODE_CLEAN="${WANDB_MODE_CLEAN//$'\n'/}"
 TASK_MANIFEST="${TASK_MANIFEST:-${WORKDIR}/res/dataset/cancervision-standardization/task_manifests/segmentation_binary_curated.csv}"
 TASK_MANIFEST="${TASK_MANIFEST//$'\r'/}"
 TASK_MANIFEST="${TASK_MANIFEST//$'\n'/}"
-
-GPU_MEMORY_MIB="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n 1 | tr -d '[:space:]')"
-if [ -z "${GPU_MEMORY_MIB}" ]; then
-  GPU_MEMORY_MIB=0
-fi
-
-# Native single-channel segmentation can usually spend more VRAM on larger crops.
-# Keep batch size, micro-batch size, and num_samples at 1 by default so memory goes to spatial context.
-if [ "${GPU_MEMORY_MIB}" -ge 70000 ]; then
-  DETECTED_GPU_PROFILE="gpu80g"
-  DEFAULT_ROI_SIZE="144 144 144"
-  DEFAULT_MODEL_FILTERS="32 64 128 256 320"
-elif [ "${GPU_MEMORY_MIB}" -ge 45000 ]; then
-  DETECTED_GPU_PROFILE="gpu40g"
-  DEFAULT_ROI_SIZE="128 128 128"
-  DEFAULT_MODEL_FILTERS="32 64 128 256 320"
-elif [ "${GPU_MEMORY_MIB}" -ge 30000 ]; then
-  DETECTED_GPU_PROFILE="gpu32g"
-  DEFAULT_ROI_SIZE="96 96 96"
-  DEFAULT_MODEL_FILTERS="24 48 96 192 256"
-else
-  DETECTED_GPU_PROFILE="gpu16g"
-  DEFAULT_ROI_SIZE="80 80 80"
-  DEFAULT_MODEL_FILTERS="16 32 64 128 192"
-fi
-
-GPU_PROFILE_CLEAN="${GPU_PROFILE:-${DETECTED_GPU_PROFILE}}"
+GPU_PROFILE_CLEAN="${GPU_PROFILE:-gpu80g}"
 BATCH_SIZE_CLEAN="${BATCH_SIZE:-1}"
 TRAIN_MICRO_BATCH_SIZE_CLEAN="${TRAIN_MICRO_BATCH_SIZE:-1}"
 NUM_SAMPLES_CLEAN="${NUM_SAMPLES:-1}"
 VAL_SW_BATCH_SIZE_CLEAN="${VAL_SW_BATCH_SIZE:-1}"
 NUM_WORKERS_CLEAN="${NUM_WORKERS:-${SLURM_CPUS_PER_TASK}}"
-MAX_EPOCHS_CLEAN="${MAX_EPOCHS:-100}"
+MAX_EPOCHS_CLEAN="${MAX_EPOCHS:-200}"
 VAL_INTERVAL_CLEAN="${VAL_INTERVAL:-1}"
 LR_CLEAN="${LR:-1e-4}"
 WEIGHT_DECAY_CLEAN="${WEIGHT_DECAY:-1e-5}"
-ROI_SIZE_CLEAN="${ROI_SIZE:-${DEFAULT_ROI_SIZE}}"
-MODEL_FILTERS_CLEAN="${MODEL_FILTERS:-${DEFAULT_MODEL_FILTERS}}"
+ROI_SIZE_CLEAN="${ROI_SIZE:-144 144 144}"
+MODEL_FILTERS_CLEAN="${MODEL_FILTERS:-32 64 128 256 320}"
 
 read -r -a ROI_SIZE_ARGS <<< "${ROI_SIZE_CLEAN}"
 read -r -a MODEL_FILTER_ARGS <<< "${MODEL_FILTERS_CLEAN}"
 
 nvidia-smi
-echo "Detected GPU memory (MiB): ${GPU_MEMORY_MIB}"
+echo "Requested Slurm constraint: gpu80g"
 echo "GPU profile: ${GPU_PROFILE_CLEAN}"
 echo "ROI size: ${ROI_SIZE_CLEAN}"
 echo "Model filters: ${MODEL_FILTERS_CLEAN}"

@@ -15,6 +15,10 @@ from pydicom.dataset import FileDataset, FileMetaDataset
 from pydicom.uid import ExplicitVRLittleEndian, MRImageStorage, generate_uid
 
 from src.datasets.standardize import cli as standardize_cli
+from src.datasets.standardize.adapters.brats import (
+    BraTSAdapter,
+    BraTSDatasetSpec,
+)
 from src.datasets.standardize.adapters.cfb_gbm import (
     CfbGbmAdapter,
     parse_cfb_series_path,
@@ -50,6 +54,9 @@ from src.datasets.standardize.adapters.yale_brain_mets_longitudinal import (
 )
 from src.datasets.standardize.constants import (
     CFB_GBM_PREPROC_PROFILE,
+    BRATS2020_PREPROC_PROFILE,
+    BRATS2023_PREPROC_PROFILE,
+    BRATS2024_PREPROC_PROFILE,
     BRAIN_STRUCTURE_PREPROC_PROFILE,
     BRAIN_STRUCTURE_SOURCE_MANIFEST_DEFAULT,
     BRAIN_STRUCTURE_STANDARDIZED_DEFAULT_ROOT,
@@ -72,6 +79,7 @@ from src.datasets.standardize.preprocess import (
     _command_exists,
     materialize_brain_structure_manifest,
     materialize_classification_manifest,
+    materialize_segmentation_manifest,
     preflight_synthstrip_requirements,
     write_brain_structure_cls_view,
     write_classification_view,
@@ -228,6 +236,48 @@ def _classification_row(
     }
 
 
+def _segmentation_row(
+    *,
+    dataset_key: str,
+    image_path: str,
+    mask_path: str,
+    global_case_id: str,
+    subject_id: str,
+    preproc_profile: str,
+    source_split: str = "train",
+    t1_path: str = "",
+) -> dict[str, str]:
+    return {
+        "dataset_key": dataset_key,
+        "subject_id": subject_id,
+        "visit_id": "ses-01",
+        "global_case_id": global_case_id,
+        "image_path": image_path,
+        "t1_path": t1_path,
+        "diagnosis_original": "glioma",
+        "binary_status": "unhealthy",
+        "label": "unhealthy",
+        "label_family": "tumor",
+        "preproc_profile": preproc_profile,
+        "source_study": "TEST",
+        "source_split": source_split,
+        "radiata_id": "RID-001",
+        "image_quality_rating": "4",
+        "total_intracranial_volume": "1234",
+        "age": "70",
+        "sex": "F",
+        "scanner_manufacturer": "GE",
+        "scanner_model": "SIGNA",
+        "field_strength": "3T",
+        "exclude_reason": "",
+        "task_type": "segmentation",
+        "mask_path": mask_path,
+        "brain_mask_path": "",
+        "normalization_mask_method": "",
+        "mask_tier": "curated",
+    }
+
+
 class BrainStructureStandardizeTests(unittest.TestCase):
     def test_build_dataset_root_candidates_accepts_windows_paths(self) -> None:
         candidates = build_dataset_root_candidates(r"Z:\dataset\brain-structure")
@@ -289,6 +339,10 @@ class BrainStructureStandardizeTests(unittest.TestCase):
             "skip",
         )
         self.assertEqual(
+            get_dataset_registry_entry("brats2023").cls_skullstrip_policy,
+            "skip",
+        )
+        self.assertEqual(
             get_dataset_registry_entry("UPENN-GBM").cls_skullstrip_policy,
             "skip",
         )
@@ -341,6 +395,77 @@ class BrainStructureStandardizeTests(unittest.TestCase):
         parsed = parse_ucsd_case_dir_name("UCSD-PTGBM-0002_01")
 
         self.assertEqual(parsed, ("UCSD-PTGBM-0002", "01"))
+
+    def test_brats2020_adapter_builds_classification_and_segmentation_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            case_dir = root / "BraTS20_Training_001"
+            _write_nifti(case_dir / "BraTS20_Training_001_t1.nii.gz", fill_value=2.0)
+            _write_nifti(case_dir / "BraTS20_Training_001_t1ce.nii.gz", fill_value=3.0)
+            _write_nifti(case_dir / "BraTS20_Training_001_seg.nii.gz", fill_value=1.0)
+
+            adapter = BraTSAdapter(
+                root,
+                spec=BraTSDatasetSpec(
+                    dataset_key="brats2020",
+                    source_study="BraTS2020",
+                    classification_preproc_profile=BRATS2020_PREPROC_PROFILE,
+                    segmentation_preproc_profile="brats2020_native_anchor_to_seg",
+                ),
+            )
+            records = adapter.build_records()
+
+            self.assertEqual(len(records), 2)
+            records_by_type = {record.task_type: record for record in records}
+            self.assertEqual(records_by_type["classification"].dataset_key, "brats2020")
+            self.assertEqual(
+                records_by_type["classification"].subject_id,
+                "brats2020:BraTS20_Training_001",
+            )
+            self.assertEqual(
+                records_by_type["classification"].preproc_profile,
+                BRATS2020_PREPROC_PROFILE,
+            )
+            self.assertEqual(
+                records_by_type["segmentation"].image_path,
+                str(case_dir / "BraTS20_Training_001_t1ce.nii.gz"),
+            )
+            self.assertEqual(
+                records_by_type["segmentation"].mask_path,
+                str(case_dir / "BraTS20_Training_001_seg.nii.gz"),
+            )
+
+    def test_brats2023_adapter_marks_missing_t1n_classification_rows_excluded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            wrapper_dir = root / "ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData"
+            case_dir = wrapper_dir / "BraTS-GLI-00000-000"
+            _write_nifti(case_dir / "BraTS-GLI-00000-000-t1c.nii", fill_value=3.0)
+            _write_nifti(case_dir / "BraTS-GLI-00000-000-seg.nii", fill_value=1.0)
+
+            adapter = BraTSAdapter(
+                root,
+                spec=BraTSDatasetSpec(
+                    dataset_key="brats2023",
+                    source_study="BraTS2023",
+                    classification_preproc_profile=BRATS2023_PREPROC_PROFILE,
+                    segmentation_preproc_profile="brats2023_native_anchor_to_seg",
+                ),
+            )
+            records = adapter.build_records(include_excluded=True)
+
+            self.assertEqual(len(records), 2)
+            records_by_type = {record.task_type: record for record in records}
+            self.assertEqual(
+                records_by_type["classification"].exclude_reason,
+                "missing_t1_image",
+            )
+            self.assertEqual(records_by_type["classification"].t1_path, "")
+            self.assertEqual(
+                records_by_type["segmentation"].image_path,
+                str(case_dir / "BraTS-GLI-00000-000-t1c.nii"),
+            )
+            self.assertEqual(records_by_type["segmentation"].exclude_reason, "")
 
     def test_parse_cfb_series_path_extracts_subject_visit_and_modality(self) -> None:
         parsed = parse_cfb_series_path("1_t0_t1gd.nii.gz")
@@ -1298,6 +1423,33 @@ class BrainStructureStandardizeTests(unittest.TestCase):
             self.assertEqual(len(rows), 2)
             self.assertEqual({row["task_type"] for row in rows}, {"classification", "segmentation"})
 
+    def test_cli_build_brats2023_manifest_writes_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            wrapper_dir = root / "ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData"
+            case_dir = wrapper_dir / "BraTS-GLI-00008-001"
+            _write_nifti(case_dir / "BraTS-GLI-00008-001-t1n.nii", fill_value=2.0)
+            _write_nifti(case_dir / "BraTS-GLI-00008-001-t1c.nii", fill_value=3.0)
+            _write_nifti(case_dir / "BraTS-GLI-00008-001-seg.nii", fill_value=1.0)
+            output_csv = root / "out" / "brats2023.csv"
+
+            standardize_cli.main(
+                [
+                    "build-brats2023-manifest",
+                    "--brats2023-root",
+                    str(root),
+                    "--output-csv",
+                    str(output_csv),
+                ]
+            )
+
+            self.assertTrue(output_csv.is_file())
+            with output_csv.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(len(rows), 2)
+            self.assertEqual({row["task_type"] for row in rows}, {"classification", "segmentation"})
+            self.assertEqual({row["dataset_key"] for row in rows}, {"brats2023"})
+
     def test_cli_build_cfb_manifest_writes_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -1736,6 +1888,192 @@ class BrainStructureStandardizeTests(unittest.TestCase):
                 )
 
             self.assertEqual(materialized_rows[0]["exclude_reason"], "low_signal_image")
+
+    def test_materialize_segmentation_manifest_points_to_new_database_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image_path = root / "BraTS" / "case-01" / "t1ce.nii.gz"
+            mask_path = root / "BraTS" / "case-01" / "seg.nii.gz"
+            _write_nifti(image_path, fill_value=5.0)
+            _write_nifti(mask_path, fill_value=1.0)
+
+            rows = [
+                _segmentation_row(
+                    dataset_key="brats2023",
+                    image_path=str(image_path),
+                    mask_path=str(mask_path),
+                    global_case_id="brats2023__case-01__seg",
+                    subject_id="brats2023:case-01",
+                    preproc_profile="brats2023_native_anchor_to_seg",
+                )
+            ]
+
+            materialized_rows, manifest_path = materialize_segmentation_manifest(
+                rows,
+                root / "db",
+            )
+            image_path.unlink()
+            mask_path.unlink()
+
+            self.assertTrue(manifest_path.is_file())
+            self.assertEqual(len(materialized_rows), 1)
+            materialized_row = materialized_rows[0]
+            self.assertEqual(materialized_row["t1_path"], "")
+            self.assertEqual(materialized_row["brain_mask_path"], "")
+            self.assertEqual(materialized_row["normalization_mask_method"], "")
+            self.assertNotEqual(materialized_row["image_path"], str(image_path))
+            self.assertNotEqual(materialized_row["mask_path"], str(mask_path))
+            self.assertTrue(materialized_row["image_path"].endswith(".nii.gz"))
+            self.assertTrue(materialized_row["mask_path"].endswith(".nii.gz"))
+            self.assertTrue(Path(materialized_row["image_path"]).is_file())
+            self.assertTrue(Path(materialized_row["mask_path"]).is_file())
+
+            reloaded_image = np.asanyarray(nib.load(materialized_row["image_path"]).dataobj)
+            reloaded_mask = np.asanyarray(nib.load(materialized_row["mask_path"]).dataobj)
+            self.assertEqual(reloaded_image.shape, (4, 4, 4))
+            self.assertEqual(reloaded_mask.shape, (4, 4, 4))
+
+    def test_materialize_segmentation_manifest_copies_directory_image_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image_dir = root / "ReMIND-003" / "study-a" / "series-t1-post"
+            _write_dicom_series(
+                image_dir,
+                series_description="3D_AX_T1_postcontrast",
+                base_value=10,
+                num_slices=4,
+            )
+            mask_path = root / "ReMIND-003" / "study-a" / "seg.nrrd"
+            nrrd.write(str(mask_path), np.full((4, 4, 4), 1.0, dtype=np.uint8))
+
+            rows = [
+                _segmentation_row(
+                    dataset_key=REMIND_DATASET_KEY,
+                    image_path=str(image_dir),
+                    mask_path=str(mask_path),
+                    global_case_id="remind__003__study-a__seg",
+                    subject_id="remind:003",
+                    preproc_profile="remind_native_anchor_to_seg",
+                )
+            ]
+
+            with mock.patch(
+                "src.datasets.standardize.preprocess.shutil.which",
+                return_value="/usr/bin/mri_synthstrip",
+            ), mock.patch(
+                "src.datasets.standardize.preprocess._run_synthstrip",
+                return_value=(
+                    np.full((4, 4, 4), 11.0, dtype=np.float32),
+                    np.ones((4, 4, 4), dtype=np.uint8),
+                ),
+            ):
+                materialized_rows, _ = materialize_segmentation_manifest(
+                    rows,
+                    root / "db",
+                )
+
+            self.assertEqual(len(materialized_rows), 1)
+            materialized_row = materialized_rows[0]
+            copied_image_path = Path(materialized_row["image_path"])
+            copied_mask_path = Path(materialized_row["mask_path"])
+            copied_brain_mask_path = Path(materialized_row["brain_mask_path"])
+            self.assertTrue(copied_image_path.is_file())
+            self.assertTrue(copied_mask_path.is_file())
+            self.assertTrue(copied_brain_mask_path.is_file())
+            self.assertTrue(materialized_row["image_path"].endswith(".nii.gz"))
+            self.assertTrue(materialized_row["mask_path"].endswith(".nii.gz"))
+            self.assertEqual(materialized_row["normalization_mask_method"], "synthstrip")
+            self.assertTrue(materialized_row["preproc_profile"].endswith("_synthstrip"))
+            converted_image = np.asanyarray(nib.load(str(copied_image_path)).dataobj)
+            converted_mask = np.asanyarray(nib.load(str(copied_mask_path)).dataobj)
+            converted_brain_mask = np.asanyarray(
+                nib.load(str(copied_brain_mask_path)).dataobj
+            )
+            self.assertEqual(converted_image.shape, (4, 4, 4))
+            self.assertEqual(converted_mask.shape, (4, 4, 4))
+            self.assertEqual(converted_brain_mask.shape, (4, 4, 4))
+
+    def test_materialize_segmentation_manifest_reuses_existing_outputs_without_reprocessing(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            rows = [
+                _segmentation_row(
+                    dataset_key="brats2023",
+                    image_path="dummy_image.nii.gz",
+                    mask_path="dummy_mask.nii.gz",
+                    global_case_id="brats2023__case-02__seg",
+                    subject_id="brats2023:case-02",
+                    preproc_profile="brats2023_native_anchor_to_seg",
+                )
+            ]
+            case_root = root / "db" / "brats2023__case-02__seg" / "seg"
+            image_path = case_root / "image.nii.gz"
+            mask_path = case_root / "mask.nii.gz"
+            _write_nifti(image_path, fill_value=2.0)
+            _write_nifti(mask_path, fill_value=1.0)
+
+            with mock.patch(
+                "src.datasets.standardize.preprocess.write_segmentation_pair",
+                side_effect=AssertionError("should reuse existing outputs"),
+            ):
+                materialized_rows, manifest_path = materialize_segmentation_manifest(
+                    rows,
+                    root / "db",
+                )
+
+            self.assertTrue(manifest_path.is_file())
+            self.assertEqual(len(materialized_rows), 1)
+            row = materialized_rows[0]
+            self.assertEqual(row["image_path"], str(image_path))
+            self.assertEqual(row["mask_path"], str(mask_path))
+            self.assertEqual(row["t1_path"], "")
+            self.assertEqual(row["exclude_reason"], "")
+
+    def test_cli_materialize_segmentation_native_writes_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image_path = root / "BraTS" / "case-03" / "t1ce.nii.gz"
+            mask_path = root / "BraTS" / "case-03" / "seg.nii.gz"
+            _write_nifti(image_path, fill_value=4.0)
+            _write_nifti(mask_path, fill_value=1.0)
+            input_manifest = root / "manifests" / "segmentation.csv"
+            _write_manifest(
+                input_manifest,
+                [
+                    _segmentation_row(
+                        dataset_key="brats2023",
+                        image_path=str(image_path),
+                        mask_path=str(mask_path),
+                        global_case_id="brats2023__case-03__seg",
+                        subject_id="brats2023:case-03",
+                        preproc_profile="brats2023_native_anchor_to_seg",
+                    )
+                ],
+            )
+            output_dir = root / "db"
+
+            standardize_cli.main(
+                [
+                    "materialize-segmentation-native",
+                    "--input-manifest",
+                    str(input_manifest),
+                    "--output-dir",
+                    str(output_dir),
+                ]
+            )
+
+            manifest_path = output_dir / "segmentation_materialized_manifest.csv"
+            self.assertTrue(manifest_path.is_file())
+            with manifest_path.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(len(rows), 1)
+            self.assertTrue(Path(rows[0]["image_path"]).is_file())
+            self.assertTrue(Path(rows[0]["mask_path"]).is_file())
+            self.assertTrue(rows[0]["image_path"].endswith(".nii.gz"))
+            self.assertTrue(rows[0]["mask_path"].endswith(".nii.gz"))
+            self.assertEqual(rows[0]["t1_path"], "")
 
 
 if __name__ == "__main__":

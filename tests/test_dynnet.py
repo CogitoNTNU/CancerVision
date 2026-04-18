@@ -1,19 +1,37 @@
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
-from collections import ChainMap
+from pathlib import Path
+from unittest import mock
 
 import torch
 
 from src.models.dynnet import (
+    DEFAULT_GPU_PROFILE_NAME,
+    GPU_PROFILE_CONFIGS,
+    GpuProfileConfig,
+    apply_gpu_profile_defaults,
+    build_cancervision_segmentation_splits,
+    build_dataset_splits,
     build_micro_batch_slices,
     build_model,
+    detect_gpu_profile_from_constraints,
+    detect_requested_world_size,
+    get_dataset_config,
     parse_args,
-    resolve_distributed_launch_config,
+    resolve_gpu_profile,
+    setup_device_and_distributed,
 )
 
 
 class DynnetSmokeTests(unittest.TestCase):
+    def _touch(self, path: Path) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"")
+        return path
+
     def test_build_model_smoke_forward(self) -> None:
         model = build_model()
         model.eval()
@@ -23,6 +41,16 @@ class DynnetSmokeTests(unittest.TestCase):
             outputs = model(inputs)
 
         self.assertEqual(tuple(outputs.shape), (1, 3, 32, 32, 32))
+
+    def test_build_model_supports_cancervision_binary_shape(self) -> None:
+        model = build_model(in_channels=1, out_channels=1)
+        model.eval()
+        inputs = torch.randn(1, 1, 32, 32, 32)
+
+        with torch.no_grad():
+            outputs = model(inputs)
+
+        self.assertEqual(tuple(outputs.shape), (1, 1, 32, 32, 32))
 
     def test_dynnet_module_help(self) -> None:
         result = subprocess.run(
@@ -39,7 +67,11 @@ class DynnetSmokeTests(unittest.TestCase):
         args = parse_args([])
 
         self.assertEqual(args.train_micro_batch_size, 1)
-        self.assertEqual(args.val_sw_batch_size, 1)
+        self.assertIsNone(args.val_sw_batch_size)
+        self.assertIsNone(args.roi_size)
+        self.assertIsNone(args.num_samples)
+        self.assertEqual(args.gpu_profile, "auto")
+        self.assertEqual(args.dataset_source, "brats")
 
     def test_build_micro_batch_slices_splits_effective_batch(self) -> None:
         slices = build_micro_batch_slices(total_batch_size=4, requested_micro_batch_size=1)
@@ -51,63 +83,185 @@ class DynnetSmokeTests(unittest.TestCase):
 
         self.assertEqual(slices, [slice(0, 3)])
 
+    def test_get_dataset_config_supports_cancervision_binary_seg(self) -> None:
+        config = get_dataset_config("cancervision_binary_seg")
 
-class DistributedLaunchConfigTests(unittest.TestCase):
-    def _env(self, **overrides: str) -> ChainMap[str, str]:
-        return ChainMap(
-            overrides,
-            {
-                "WORLD_SIZE": "1",
-                "RANK": "0",
-                "LOCAL_RANK": "0",
-            },
-        )
+        self.assertEqual(config.in_channels, 1)
+        self.assertEqual(config.out_channels, 1)
+        self.assertEqual(config.metric_names, ("lesion",))
 
-    def test_world_size_one_uses_non_distributed_path(self) -> None:
-        config = resolve_distributed_launch_config(
-            self._env(),
-            cuda_available=True,
-            visible_gpu_count=1,
-        )
-
-        self.assertFalse(config.distributed)
-        self.assertEqual(config.world_size, 1)
-        self.assertIsNone(config.device_index)
-
-    def test_one_visible_gpu_per_process_maps_to_cuda_zero(self) -> None:
-        config = resolve_distributed_launch_config(
-            self._env(WORLD_SIZE="2", RANK="1", LOCAL_RANK="1", SLURM_GPUS_ON_NODE="2"),
-            cuda_available=True,
-            visible_gpu_count=1,
-        )
-
-        self.assertTrue(config.distributed)
-        self.assertEqual(config.device_index, 0)
-
-    def test_multi_visible_gpu_process_maps_to_local_rank(self) -> None:
-        config = resolve_distributed_launch_config(
-            self._env(WORLD_SIZE="2", RANK="1", LOCAL_RANK="1", SLURM_GPUS_ON_NODE="2"),
-            cuda_available=True,
-            visible_gpu_count=2,
-        )
-
-        self.assertEqual(config.device_index, 1)
-
-    def test_allocated_gpu_count_smaller_than_world_size_raises(self) -> None:
-        with self.assertRaisesRegex(RuntimeError, "allocated GPU count is smaller than world size"):
-            resolve_distributed_launch_config(
-                self._env(WORLD_SIZE="2", RANK="0", LOCAL_RANK="0", SLURM_GPUS_ON_NODE="1"),
-                cuda_available=True,
-                visible_gpu_count=1,
+    def test_build_cancervision_segmentation_splits_reads_task_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image1 = self._touch(root / "images" / "image1.nii.gz")
+            mask1 = self._touch(root / "masks" / "mask1.nii.gz")
+            image2 = self._touch(root / "images" / "image2.nii.gz")
+            mask2 = self._touch(root / "masks" / "mask2.nii.gz")
+            image3 = self._touch(root / "images" / "image3.nii.gz")
+            mask3 = self._touch(root / "masks" / "mask3.nii.gz")
+            manifest = root / "segmentation_binary_curated.csv"
+            manifest.write_text(
+                "\n".join(
+                    [
+                        "task_name,task_split,global_case_id,image_path,mask_path,exclude_reason",
+                        "segmentation_binary_curated,train,case-1,images/image1.nii.gz,masks/mask1.nii.gz,",
+                        "segmentation_binary_curated,val,case-2,images/image2.nii.gz,masks/mask2.nii.gz,",
+                        "segmentation_binary_curated,test,case-3,images/image3.nii.gz,masks/mask3.nii.gz,",
+                        "segmentation_binary_curated,train,case-4,images/image4.nii.gz,,",
+                    ]
+                ),
+                encoding="utf-8",
             )
 
-    def test_zero_visible_gpus_raises(self) -> None:
-        with self.assertRaisesRegex(RuntimeError, "requires at least one CUDA-visible GPU per process"):
-            resolve_distributed_launch_config(
-                self._env(WORLD_SIZE="2", RANK="0", LOCAL_RANK="0", SLURM_GPUS_ON_NODE="2"),
-                cuda_available=True,
-                visible_gpu_count=0,
+            train_rows, val_rows, test_rows = build_cancervision_segmentation_splits(
+                manifest
             )
+
+            self.assertEqual(train_rows, [{"image": os.path.normpath(str(image1)), "label": os.path.normpath(str(mask1))}])
+            self.assertEqual(val_rows, [{"image": os.path.normpath(str(image2)), "label": os.path.normpath(str(mask2))}])
+            self.assertEqual(test_rows, [{"image": os.path.normpath(str(image3)), "label": os.path.normpath(str(mask3))}])
+
+    def test_build_cancervision_segmentation_splits_rejects_duplicate_case_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._touch(root / "image1.nii.gz")
+            self._touch(root / "mask1.nii.gz")
+            self._touch(root / "image2.nii.gz")
+            self._touch(root / "mask2.nii.gz")
+            manifest = root / "segmentation_binary_curated.csv"
+            manifest.write_text(
+                "\n".join(
+                    [
+                        "task_name,task_split,global_case_id,image_path,mask_path,exclude_reason",
+                        "segmentation_binary_curated,train,dup-case,image1.nii.gz,mask1.nii.gz,",
+                        "segmentation_binary_curated,val,dup-case,image2.nii.gz,mask2.nii.gz,",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "Duplicate case 'dup-case'"):
+                build_cancervision_segmentation_splits(manifest)
+
+    def test_build_dataset_splits_uses_cancervision_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image1 = self._touch(root / "image1.nii.gz")
+            mask1 = self._touch(root / "mask1.nii.gz")
+            image2 = self._touch(root / "image2.nii.gz")
+            mask2 = self._touch(root / "mask2.nii.gz")
+            manifest = root / "segmentation_binary_curated.csv"
+            manifest.write_text(
+                "\n".join(
+                    [
+                        "task_name,task_split,global_case_id,image_path,mask_path,exclude_reason",
+                        "segmentation_binary_curated,train,case-1,image1.nii.gz,mask1.nii.gz,",
+                        "segmentation_binary_curated,val,case-2,image2.nii.gz,mask2.nii.gz,",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            args = parse_args(
+                [
+                    "--dataset-source",
+                    "cancervision_binary_seg",
+                    "--task-manifest",
+                    str(manifest),
+                ]
+            )
+            train_rows, val_rows, test_rows = build_dataset_splits(args)
+
+            self.assertEqual(train_rows, [{"image": os.path.normpath(str(image1)), "label": os.path.normpath(str(mask1))}])
+            self.assertEqual(val_rows, [{"image": os.path.normpath(str(image2)), "label": os.path.normpath(str(mask2))}])
+            self.assertEqual(test_rows, [])
+
+
+class SingleGpuLaunchTests(unittest.TestCase):
+    def _cpu_context(self) -> object:
+        return type(
+            "FakeContext",
+            (),
+            {"device": torch.device("cpu"), "distributed": False, "rank": 0, "local_rank": 0, "world_size": 1},
+        )()
+
+    def test_detect_requested_world_size_prefers_world_size(self) -> None:
+        self.assertEqual(detect_requested_world_size({"WORLD_SIZE": "3", "SLURM_NTASKS": "1"}), 3)
+
+    def test_detect_requested_world_size_falls_back_to_slurm_ntasks(self) -> None:
+        self.assertEqual(detect_requested_world_size({"SLURM_NTASKS": "2"}), 2)
+
+    def test_setup_device_and_distributed_rejects_multi_process_launch(self) -> None:
+        with mock.patch.dict(os.environ, {"WORLD_SIZE": "2", "RANK": "1", "LOCAL_RANK": "1"}, clear=False):
+            with self.assertRaisesRegex(RuntimeError, "single-process single-GPU runs only"):
+                setup_device_and_distributed()
+
+    def test_detect_gpu_profile_from_constraints_prefers_memory_tier(self) -> None:
+        self.assertEqual(
+            detect_gpu_profile_from_constraints({"SLURM_JOB_CONSTRAINTS": "a100&gpu80g"}),
+            "gpu80g",
+        )
+
+    def test_detect_gpu_profile_from_constraints_maps_architecture_alias(self) -> None:
+        self.assertEqual(
+            detect_gpu_profile_from_constraints({"SLURM_JOB_CONSTRAINTS": "v100"}),
+            "gpu32g",
+        )
+
+    def test_resolve_gpu_profile_uses_default_when_no_constraints_or_cuda(self) -> None:
+        profile = resolve_gpu_profile("auto", self._cpu_context(), {})
+
+        self.assertIsInstance(profile, GpuProfileConfig)
+        self.assertEqual(profile.name, DEFAULT_GPU_PROFILE_NAME)
+
+    def test_apply_gpu_profile_defaults_uses_requested_constraint_profile(self) -> None:
+        args = parse_args([])
+        profile = apply_gpu_profile_defaults(
+            args,
+            self._cpu_context(),
+            {"SLURM_JOB_CONSTRAINTS": "gpu16g"},
+        )
+
+        self.assertEqual(profile.name, "gpu16g")
+        self.assertEqual(tuple(args.roi_size), GPU_PROFILE_CONFIGS["gpu16g"].roi_size)
+        self.assertEqual(args.num_samples, GPU_PROFILE_CONFIGS["gpu16g"].num_samples)
+        self.assertEqual(
+            tuple(args.model_filters),
+            GPU_PROFILE_CONFIGS["gpu16g"].model_filters,
+        )
+        self.assertEqual(
+            args.val_sw_batch_size,
+            GPU_PROFILE_CONFIGS["gpu16g"].val_sw_batch_size,
+        )
+
+    def test_apply_gpu_profile_defaults_keeps_explicit_overrides(self) -> None:
+        args = parse_args(
+            [
+                "--gpu-profile",
+                "gpu80g",
+                "--roi-size",
+                "72",
+                "72",
+                "72",
+                "--num-samples",
+                "3",
+                "--model-filters",
+                "8",
+                "16",
+                "32",
+                "64",
+                "96",
+                "--val-sw-batch-size",
+                "2",
+            ]
+        )
+        profile = apply_gpu_profile_defaults(args, self._cpu_context(), {})
+
+        self.assertEqual(profile.name, "gpu80g")
+        self.assertEqual(tuple(args.roi_size), (72, 72, 72))
+        self.assertEqual(args.num_samples, 3)
+        self.assertEqual(tuple(args.model_filters), (8, 16, 32, 64, 96))
+        self.assertEqual(args.val_sw_batch_size, 2)
 
 
 if __name__ == "__main__":

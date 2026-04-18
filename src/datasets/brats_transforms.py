@@ -38,3 +38,13 @@ class EnsureFloatLabeld(MapTransform):
         for key in self.key_iterator(d):
             d[key] = d[key].float()
         return d
+
+
+class BinarizeLabeld(MapTransform):
+    """Convert any non-zero label voxels into a single binary lesion channel."""
+
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]):
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = (d[key] > 0).float()
+        return d

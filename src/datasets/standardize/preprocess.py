@@ -1,4 +1,4 @@
-"""Preprocessing utilities for standardized classification views."""
+"""Preprocessing utilities for standardized classification and segmentation views."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ import uuid
 import nibabel as nib
 import numpy as np
 import pydicom
+import nrrd
 from scipy.ndimage import zoom
 
 from .constants import (
@@ -61,6 +62,17 @@ class ClassificationViewResult:
         """Backward-compatible alias for brain mask path."""
 
         return self.brain_mask_path
+
+
+@dataclass(frozen=True, slots=True)
+class SegmentationPairResult:
+    """Materialized native-scale segmentation outputs."""
+
+    image_path: Path
+    mask_path: Path
+    brain_mask_path: Path | None
+    normalization_mask_method: str
+    preproc_profile: str
 
 
 def _text(value: object) -> str:
@@ -138,6 +150,11 @@ def _dicom_sort_key(dataset: pydicom.Dataset) -> tuple[float, float, float, floa
 
 
 def _load_dicom_series(input_path: str | Path) -> np.ndarray:
+    datasets = _load_dicom_datasets(input_path)
+    return _stack_dicom_datasets(datasets)
+
+
+def _load_dicom_datasets(input_path: str | Path) -> list[pydicom.Dataset]:
     source = Path(input_path)
     series_dir = source if source.is_dir() else source.parent
     dicom_files = sorted(path for path in series_dir.iterdir() if path.is_file() and path.suffix.lower() == ".dcm")
@@ -149,7 +166,10 @@ def _load_dicom_series(input_path: str | Path) -> np.ndarray:
 
     datasets = [pydicom.dcmread(str(path)) for path in dicom_files]
     datasets.sort(key=_dicom_sort_key)
+    return datasets
 
+
+def _stack_dicom_datasets(datasets: list[pydicom.Dataset]) -> np.ndarray:
     try:
         slices = [dataset.pixel_array.astype(np.float32) for dataset in datasets]
     except Exception as exc:  # pragma: no cover - exact decoder depends on DICOM transfer syntax
@@ -165,6 +185,133 @@ def _load_dicom_series(input_path: str | Path) -> np.ndarray:
             f"DICOM volume must be 3D after stacking, got shape {volume.shape}",
         )
     return volume
+
+
+def _build_dicom_affine(datasets: list[pydicom.Dataset]) -> np.ndarray:
+    first = datasets[0]
+    orientation = getattr(first, "ImageOrientationPatient", None)
+    image_position = getattr(first, "ImagePositionPatient", None)
+    pixel_spacing = getattr(first, "PixelSpacing", None)
+    if (
+        orientation is None
+        or image_position is None
+        or pixel_spacing is None
+        or len(orientation) < 6
+        or len(image_position) < 3
+        or len(pixel_spacing) < 2
+    ):
+        return np.diag([1.0, 1.0, 1.0, 1.0])
+
+    row_direction = np.asarray(orientation[:3], dtype=np.float64)
+    column_direction = np.asarray(orientation[3:6], dtype=np.float64)
+    slice_direction = np.cross(row_direction, column_direction)
+
+    row_spacing = float(pixel_spacing[0])
+    column_spacing = float(pixel_spacing[1])
+    origin = np.asarray(image_position[:3], dtype=np.float64)
+
+    if len(datasets) > 1:
+        second_position = getattr(datasets[1], "ImagePositionPatient", None)
+        if second_position is not None and len(second_position) >= 3:
+            slice_vector = np.asarray(second_position[:3], dtype=np.float64) - origin
+        else:
+            slice_thickness = float(
+                getattr(first, "SpacingBetweenSlices", getattr(first, "SliceThickness", 1.0))
+            )
+            slice_vector = slice_direction * slice_thickness
+    else:
+        slice_thickness = float(
+            getattr(first, "SpacingBetweenSlices", getattr(first, "SliceThickness", 1.0))
+        )
+        slice_vector = slice_direction * slice_thickness
+
+    affine = np.eye(4, dtype=np.float64)
+    affine[:3, 0] = row_direction * row_spacing
+    affine[:3, 1] = column_direction * column_spacing
+    affine[:3, 2] = slice_vector
+    affine[:3, 3] = origin
+    return affine
+
+
+def _build_nrrd_affine(header: dict[str, object], ndim: int) -> np.ndarray:
+    affine = np.eye(4, dtype=np.float64)
+
+    space_directions = header.get("space directions")
+    if isinstance(space_directions, np.ndarray):
+        directions = space_directions.tolist()
+    else:
+        directions = list(space_directions) if isinstance(space_directions, (list, tuple)) else []
+    if len(directions) >= 3:
+        valid_directions = True
+        for axis, direction in enumerate(directions[:3]):
+            if direction is None:
+                valid_directions = False
+                break
+            direction_array = np.asarray(direction, dtype=np.float64)
+            if direction_array.shape != (3,):
+                valid_directions = False
+                break
+            affine[:3, axis] = direction_array
+        if valid_directions:
+            origin = header.get("space origin")
+            if origin is not None:
+                origin_array = np.asarray(origin, dtype=np.float64)
+                if origin_array.shape == (3,):
+                    affine[:3, 3] = origin_array
+            return affine
+
+    spacings = header.get("spacings")
+    if isinstance(spacings, np.ndarray):
+        spacings_list = spacings.tolist()
+    else:
+        spacings_list = list(spacings) if isinstance(spacings, (list, tuple)) else []
+    if len(spacings_list) >= min(ndim, 3):
+        for axis, spacing in enumerate(spacings_list[:3]):
+            try:
+                affine[axis, axis] = float(spacing)
+            except (TypeError, ValueError):
+                affine[axis, axis] = 1.0
+    return affine
+
+
+def _build_nifti_from_source(
+    input_path: str | Path,
+    *,
+    exclude_reason: str,
+) -> nib.Nifti1Image:
+    source = Path(input_path)
+    if source.is_dir() or source.suffix.lower() == ".dcm":
+        datasets = _load_dicom_datasets(source)
+        volume = _stack_dicom_datasets(datasets)
+        affine = _build_dicom_affine(datasets)
+        return nib.Nifti1Image(volume.astype(np.float32), affine)
+
+    if source.name.lower().endswith((".nrrd", ".nhdr")):
+        try:
+            data, header = nrrd.read(str(source))
+        except Exception as exc:
+            raise ClassificationPreprocessError(
+                exclude_reason,
+                f"Could not read NRRD file {source}: {exc}",
+            ) from exc
+        array = np.asarray(data)
+        if array.ndim < 3:
+            raise ClassificationPreprocessError(
+                exclude_reason,
+                f"NRRD volume must be at least 3D, got shape {array.shape}",
+            )
+        affine = _build_nrrd_affine(header, array.ndim)
+        return nib.Nifti1Image(array, affine)
+
+    try:
+        image = nib.load(str(source))
+    except Exception as exc:
+        raise ClassificationPreprocessError(
+            exclude_reason,
+            f"Could not read image file {source}: {exc}",
+        ) from exc
+    data = np.asanyarray(image.dataobj)
+    return nib.Nifti1Image(data, image.affine, image.header)
 
 
 def _load_input_volume(input_path: str | Path) -> np.ndarray:
@@ -520,11 +667,12 @@ def write_brain_structure_cls_view(
 
 
 def rows_requiring_synthstrip(rows: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Return classification rows that require SynthStrip."""
+    """Return manifest rows that require SynthStrip."""
 
     required_rows: list[dict[str, str]] = []
     for row in rows:
-        if _text(row.get("task_type") or "classification") != "classification":
+        task_type = _text(row.get("task_type") or "classification")
+        if task_type not in {"classification", "segmentation"}:
             continue
         if _text(row.get("exclude_reason")):
             continue
@@ -562,10 +710,16 @@ def _extra_fieldnames(rows: list[dict[str, str]]) -> list[str]:
     return [*base_fields, *extras]
 
 
-def _blank_materialized_paths(row: dict[str, str]) -> dict[str, str]:
+def _blank_materialized_paths(
+    row: dict[str, str],
+    *,
+    clear_mask: bool = False,
+) -> dict[str, str]:
     materialized_row = dict(row)
     materialized_row["image_path"] = ""
     materialized_row["t1_path"] = ""
+    if clear_mask:
+        materialized_row["mask_path"] = ""
     materialized_row["brain_mask_path"] = ""
     materialized_row["normalization_mask_method"] = ""
     return materialized_row
@@ -575,11 +729,15 @@ def _build_resumed_failed_row(
     row: dict[str, str],
     *,
     existing_manifest_row: dict[str, str],
+    clear_mask: bool = False,
 ) -> dict[str, str] | None:
     existing_exclude_reason = _text(existing_manifest_row.get("exclude_reason"))
     if not existing_exclude_reason:
         return None
-    resumed_row = _blank_materialized_paths(dict(row))
+    resumed_row = _blank_materialized_paths(
+        dict(row),
+        clear_mask=clear_mask,
+    )
     resumed_row["exclude_reason"] = existing_exclude_reason
     existing_preproc_profile = _text(existing_manifest_row.get("preproc_profile"))
     if existing_preproc_profile:
@@ -597,6 +755,19 @@ def _materialized_paths_for_case(
     )
 
 
+def _segmentation_materialized_paths_for_case(
+    image_source: str | Path,
+    mask_source: str | Path,
+    case_output_root: str | Path,
+) -> tuple[Path, Path]:
+    root = Path(case_output_root) / "seg"
+    return root / "image.nii.gz", root / "mask.nii.gz"
+
+
+def _segmentation_brain_mask_path_for_case(case_output_root: str | Path) -> Path:
+    return Path(case_output_root) / "seg" / "brain_mask.nii.gz"
+
+
 def _is_valid_materialized_nifti(
     image_path: Path,
     *,
@@ -609,6 +780,16 @@ def _is_valid_materialized_nifti(
     except Exception:
         return False
     return tuple(int(axis) for axis in image.shape) == expected_shape
+
+
+def _is_valid_materialized_segmentation_nifti(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        image = nib.load(str(path))
+    except Exception:
+        return False
+    return len(image.shape) >= 3 and all(int(axis) > 0 for axis in image.shape[:3])
 
 
 def _load_existing_materialized_rows(
@@ -684,6 +865,79 @@ def _build_resumed_materialized_row(
             skullstrip_policy=registry_entry.cls_skullstrip_policy,
         )
     )
+    return materialized_row
+
+
+def _build_resumed_segmentation_materialized_row(
+    row: dict[str, str],
+    *,
+    case_output_root: Path,
+    existing_manifest_row: dict[str, str] | None,
+) -> dict[str, str] | None:
+    default_image_path, default_mask_path = _segmentation_materialized_paths_for_case(
+        row["image_path"],
+        row["mask_path"],
+        case_output_root,
+    )
+    existing_image_path_text = ""
+    existing_mask_path_text = ""
+    existing_brain_mask_path_text = ""
+    existing_normalization_mask_method = ""
+    existing_preproc_profile = ""
+    if existing_manifest_row is not None:
+        existing_image_path_text = _text(existing_manifest_row.get("image_path"))
+        existing_mask_path_text = _text(existing_manifest_row.get("mask_path"))
+        existing_brain_mask_path_text = _text(
+            existing_manifest_row.get("brain_mask_path")
+        )
+        existing_normalization_mask_method = _text(
+            existing_manifest_row.get("normalization_mask_method")
+        )
+        existing_preproc_profile = _text(existing_manifest_row.get("preproc_profile"))
+
+    resolved_image_path = (
+        Path(existing_image_path_text) if existing_image_path_text else default_image_path
+    )
+    resolved_mask_path = (
+        Path(existing_mask_path_text) if existing_mask_path_text else default_mask_path
+    )
+    if not _is_valid_materialized_segmentation_nifti(
+        resolved_image_path
+    ) or not _is_valid_materialized_segmentation_nifti(resolved_mask_path):
+        if not _is_valid_materialized_segmentation_nifti(
+            default_image_path
+        ) or not _is_valid_materialized_segmentation_nifti(default_mask_path):
+            return None
+        resolved_image_path = default_image_path
+        resolved_mask_path = default_mask_path
+
+    materialized_row = dict(row)
+    materialized_row["exclude_reason"] = ""
+    materialized_row["image_path"] = str(resolved_image_path)
+    materialized_row["mask_path"] = str(resolved_mask_path)
+    materialized_row["t1_path"] = ""
+    registry_entry = get_dataset_registry_entry(_text(row.get("dataset_key")))
+    default_brain_mask_path = _segmentation_brain_mask_path_for_case(case_output_root)
+    resolved_brain_mask_path = (
+        Path(existing_brain_mask_path_text)
+        if existing_brain_mask_path_text
+        else default_brain_mask_path
+    )
+    if existing_normalization_mask_method == "synthstrip" or (
+        not existing_normalization_mask_method
+        and registry_entry.cls_skullstrip_policy == "synthstrip"
+    ):
+        materialized_row["normalization_mask_method"] = "synthstrip"
+        materialized_row["brain_mask_path"] = (
+            str(resolved_brain_mask_path)
+            if _is_valid_materialized_segmentation_nifti(resolved_brain_mask_path)
+            else ""
+        )
+    else:
+        materialized_row["brain_mask_path"] = ""
+        materialized_row["normalization_mask_method"] = ""
+    if existing_preproc_profile:
+        materialized_row["preproc_profile"] = existing_preproc_profile
     return materialized_row
 
 
@@ -835,6 +1089,272 @@ def materialize_classification_manifest(
 
             materialized_row["image_path"] = str(result.image_path)
             materialized_row["t1_path"] = str(result.image_path)
+            materialized_row["brain_mask_path"] = (
+                "" if result.brain_mask_path is None else str(result.brain_mask_path)
+            )
+            materialized_row["normalization_mask_method"] = (
+                result.normalization_mask_method
+            )
+            materialized_row["preproc_profile"] = result.preproc_profile
+            materialized_rows.append(materialized_row)
+            processed_count += 1
+            success_count += 1
+            if processed_count == 1 or processed_count % max(progress_interval, 1) == 0:
+                print(
+                    f"[{processed_count}/{total_rows}] standardized rows: ok={success_count}, failed={failed_count}, resumed={resumed_count}",
+                    flush=True,
+                )
+
+    write_csv_rows(manifest_path, materialized_rows, _extra_fieldnames(materialized_rows))
+    print(
+        f"Finished materialization: ok={success_count}, failed={failed_count}, total={total_rows}",
+        flush=True,
+    )
+    return materialized_rows, manifest_path
+
+
+class SegmentationMaterializationError(RuntimeError):
+    """Segmentation materialization error that maps to manifest exclusion reason."""
+
+    def __init__(self, exclude_reason: str, message: str) -> None:
+        super().__init__(message)
+        self.exclude_reason = exclude_reason
+
+
+def write_segmentation_pair(
+    image_path: str | Path,
+    mask_path: str | Path,
+    case_output_root: str | Path,
+    *,
+    original_preproc_profile: str = "",
+    dataset_key: str,
+    synthstrip_cmd: str = "mri_synthstrip",
+) -> SegmentationPairResult:
+    """Convert native-scale segmentation image/mask pair into `.nii.gz` layout."""
+
+    source_image_path = Path(image_path)
+    source_mask_path = Path(mask_path)
+    if not source_image_path.exists():
+        raise SegmentationMaterializationError(
+            "missing_anchor_image",
+            f"Segmentation anchor image not found: {source_image_path}",
+        )
+    if not source_mask_path.exists():
+        raise SegmentationMaterializationError(
+            "missing_segmentation_mask",
+            f"Segmentation mask not found: {source_mask_path}",
+        )
+
+    materialized_image_path, materialized_mask_path = _segmentation_materialized_paths_for_case(
+        source_image_path,
+        source_mask_path,
+        case_output_root,
+    )
+    registry_entry = get_dataset_registry_entry(dataset_key)
+    normalization_mask_method = ""
+    brain_mask_path: Path | None = None
+    try:
+        materialized_image_path.parent.mkdir(parents=True, exist_ok=True)
+        image = _build_nifti_from_source(
+            source_image_path,
+            exclude_reason="invalid_image_file",
+        )
+        mask = _build_nifti_from_source(
+            source_mask_path,
+            exclude_reason="invalid_segmentation_mask",
+        )
+        if registry_entry.cls_skullstrip_policy == "synthstrip":
+            stripped_volume, brain_mask = _run_synthstrip(
+                image,
+                synthstrip_cmd=synthstrip_cmd,
+            )
+            image = nib.Nifti1Image(stripped_volume, image.affine, image.header)
+            brain_mask_path = _segmentation_brain_mask_path_for_case(case_output_root)
+            nib.save(
+                nib.Nifti1Image(
+                    brain_mask.astype(np.uint8),
+                    image.affine,
+                ),
+                str(brain_mask_path),
+            )
+            normalization_mask_method = "synthstrip"
+        nib.save(image, str(materialized_image_path))
+        nib.save(mask, str(materialized_mask_path))
+    except ClassificationPreprocessError as exc:
+        mapped_reason = exc.exclude_reason
+        if mapped_reason == "invalid_image_file":
+            mapped_reason = "invalid_anchor_image"
+        elif mapped_reason == "invalid_segmentation_mask":
+            mapped_reason = "invalid_segmentation_mask"
+        raise SegmentationMaterializationError(
+            mapped_reason,
+            str(exc),
+        ) from exc
+    except OSError as exc:
+        raise SegmentationMaterializationError(
+            "segmentation_materialization_failed",
+            (
+                f"Could not materialize segmentation pair "
+                f"{source_image_path} / {source_mask_path}: {exc}"
+            ),
+        ) from exc
+
+    return SegmentationPairResult(
+        image_path=materialized_image_path,
+        mask_path=materialized_mask_path,
+        brain_mask_path=brain_mask_path,
+        normalization_mask_method=normalization_mask_method,
+        preproc_profile=_resolved_preproc_profile(
+            dataset_key,
+            original_preproc_profile,
+            skullstrip_policy=registry_entry.cls_skullstrip_policy,
+        ),
+    )
+
+
+def materialize_segmentation_manifest(
+    rows: list[dict[str, str]],
+    output_dir: str | Path,
+    *,
+    output_manifest_path: str | Path | None = None,
+    synthstrip_cmd: str = "mri_synthstrip",
+    progress_interval: int = 100,
+) -> tuple[list[dict[str, str]], Path]:
+    """Convert native-scale segmentation pairs and emit manifest pointing to copies."""
+
+    destination = Path(output_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    manifest_path = (
+        destination / "segmentation_materialized_manifest.csv"
+        if output_manifest_path is None
+        else Path(output_manifest_path)
+    )
+
+    segmentation_rows = [
+        row
+        for row in rows
+        if _text(row.get("task_type")) == "segmentation"
+    ]
+    total_rows = len(segmentation_rows)
+    skipped_rows = sum(1 for row in segmentation_rows if _text(row.get("exclude_reason")))
+    print(
+        f"Materializing {total_rows} segmentation rows to {destination}",
+        flush=True,
+    )
+    if skipped_rows:
+        print(
+            f"Rows already excluded in source manifest: {skipped_rows}",
+            flush=True,
+        )
+
+    existing_rows_by_case_id = _load_existing_materialized_rows(manifest_path)
+    materialized_rows: list[dict[str, str]] = []
+    rows_to_process: list[dict[str, str]] = []
+    processed_count = 0
+    success_count = 0
+    failed_count = 0
+    resumed_count = 0
+    resumed_failed_count = 0
+
+    for row in segmentation_rows:
+        materialized_row = dict(row)
+        materialized_row.setdefault("brain_mask_path", "")
+        materialized_row.setdefault("normalization_mask_method", "")
+
+        if _text(row.get("exclude_reason")):
+            materialized_rows.append(
+                _blank_materialized_paths(
+                    materialized_row,
+                    clear_mask=True,
+                )
+            )
+            processed_count += 1
+            continue
+
+        resumed_row = _build_resumed_segmentation_materialized_row(
+            row,
+            case_output_root=destination / row["global_case_id"],
+            existing_manifest_row=existing_rows_by_case_id.get(
+                _text(row.get("global_case_id"))
+            ),
+        )
+        if resumed_row is not None:
+            materialized_rows.append(resumed_row)
+            processed_count += 1
+            success_count += 1
+            resumed_count += 1
+            continue
+
+        resumed_failed_row = _build_resumed_failed_row(
+            row,
+            existing_manifest_row=existing_rows_by_case_id.get(
+                _text(row.get("global_case_id"))
+            )
+            or {},
+            clear_mask=True,
+        )
+        if resumed_failed_row is not None:
+            materialized_rows.append(resumed_failed_row)
+            processed_count += 1
+            failed_count += 1
+            resumed_failed_count += 1
+            continue
+
+        rows_to_process.append(row)
+
+    if resumed_count:
+        print(
+            f"Reusing existing standardized rows: {resumed_count}",
+            flush=True,
+        )
+    if resumed_failed_count:
+        print(
+            f"Reusing existing failed rows: {resumed_failed_count}",
+            flush=True,
+        )
+
+    preflight_synthstrip_requirements(
+        rows_to_process,
+        synthstrip_cmd=synthstrip_cmd,
+    )
+
+    with _managed_synthstrip_session(
+        rows_to_process,
+        synthstrip_cmd=synthstrip_cmd,
+    ):
+        for row in rows_to_process:
+            materialized_row = dict(row)
+            materialized_row.setdefault("brain_mask_path", "")
+            materialized_row.setdefault("normalization_mask_method", "")
+
+            try:
+                result = write_segmentation_pair(
+                    row["image_path"],
+                    row["mask_path"],
+                    destination / row["global_case_id"],
+                    original_preproc_profile=_text(row.get("preproc_profile")),
+                    dataset_key=_text(row.get("dataset_key")),
+                    synthstrip_cmd=synthstrip_cmd,
+                )
+            except SegmentationMaterializationError as exc:
+                failed_row = _blank_materialized_paths(
+                    materialized_row,
+                    clear_mask=True,
+                )
+                failed_row["exclude_reason"] = exc.exclude_reason
+                materialized_rows.append(failed_row)
+                processed_count += 1
+                failed_count += 1
+                if failed_count <= 10:
+                    print(
+                        f"[{processed_count}/{total_rows}] failed {row.get('global_case_id', '<unknown>')} -> {exc.exclude_reason}",
+                        flush=True,
+                    )
+                continue
+
+            materialized_row["image_path"] = str(result.image_path)
+            materialized_row["mask_path"] = str(result.mask_path)
+            materialized_row["t1_path"] = ""
             materialized_row["brain_mask_path"] = (
                 "" if result.brain_mask_path is None else str(result.brain_mask_path)
             )

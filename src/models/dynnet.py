@@ -1,22 +1,21 @@
 #!/usr/bin/env python
-"""BraTS2020 DynUNet trainer with optional W&B and single-node Slurm DDP."""
+"""BraTS DynUNet trainer for 2020/2023/2024 NIfTI layouts."""
 
 from __future__ import annotations
 
 import argparse
+import csv
 import contextlib
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import torch
-import torch.distributed as dist
 from sklearn.model_selection import train_test_split
-from torch.nn.parallel import DistributedDataParallel
-from torch.utils.data.distributed import DistributedSampler
 
 from monai.config import print_config
 from monai.data import DataLoader, Dataset, decollate_batch, list_data_collate
@@ -44,15 +43,33 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.datasets import ConvertToMultiChannelBasedOnBratsClassesd  # noqa: E402
+from src.datasets import (  # noqa: E402
+    BinarizeLabeld,
+    ConvertToMultiChannelBasedOnBratsClassesd,
+    EnsureFloatLabeld,
+    build_brats_data_dicts,
+    default_brats_data_dir,
+)
+from src.datasets.standardize.pathing import resolve_existing_path  # noqa: E402
 
 load_dotenv()
 
-DEFAULT_DATA_DIR = REPO_ROOT / "res" / "dataset" / "BraTS2020_TrainingData" / "MICCAI_BraTS2020_TrainingData"
+DEFAULT_DATA_DIR = default_brats_data_dir(REPO_ROOT)
+DEFAULT_CANCERVISION_DATASET_ROOT = (
+    REPO_ROOT / "res" / "dataset" / "cancervision-standardization"
+)
+DEFAULT_CANCERVISION_TASK_MANIFEST = (
+    DEFAULT_CANCERVISION_DATASET_ROOT
+    / "task_manifests"
+    / "segmentation_binary_curated.csv"
+)
 DEFAULT_SAVE_DIR = REPO_ROOT / "res" / "models"
 WANDB_PROJECT = "cancervision"
 WANDB_ENTITY = os.getenv("WANDB_ENTITY", "cancervision")
+DEFAULT_ROI_SIZE = (96, 96, 96)
+DEFAULT_NUM_SAMPLES = 1
 DEFAULT_VAL_SW_BATCH_SIZE = 1
+WINDOWS_DRIVE_PATTERN = re.compile(r"^[a-zA-Z]:[\\/]")
 
 
 @dataclass
@@ -65,17 +82,6 @@ class RuntimeContext:
     world_size: int
 
 
-@dataclass(frozen=True)
-class DistributedLaunchConfig:
-    world_size: int
-    rank: int
-    local_rank: int
-    distributed: bool
-    allocated_gpu_count: int | None
-    visible_gpu_count: int
-    device_index: int | None
-
-
 class NoOpWandbRun:
     def log(self, *_args: Any, **_kwargs: Any) -> None:
         return None
@@ -84,15 +90,100 @@ class NoOpWandbRun:
         return None
 
 
+@dataclass(frozen=True)
+class DatasetConfig:
+    name: str
+    in_channels: int
+    out_channels: int
+    metric_names: tuple[str, ...]
+    train_transform_builder: Callable[[Sequence[int], int], Compose]
+    val_transform_builder: Callable[[], Compose]
+
+
+@dataclass(frozen=True)
+class GpuProfileConfig:
+    name: str
+    roi_size: tuple[int, int, int]
+    num_samples: int
+    model_filters: tuple[int, int, int, int, int]
+    val_sw_batch_size: int = DEFAULT_VAL_SW_BATCH_SIZE
+
+
+GPU_PROFILE_CONFIGS: dict[str, GpuProfileConfig] = {
+    "gpu16g": GpuProfileConfig(
+        name="gpu16g",
+        roi_size=(64, 64, 64),
+        num_samples=1,
+        model_filters=(16, 32, 64, 128, 192),
+    ),
+    "gpu32g": GpuProfileConfig(
+        name="gpu32g",
+        roi_size=(80, 80, 80),
+        num_samples=1,
+        model_filters=(24, 48, 96, 192, 256),
+    ),
+    "gpu40g": GpuProfileConfig(
+        name="gpu40g",
+        roi_size=DEFAULT_ROI_SIZE,
+        num_samples=DEFAULT_NUM_SAMPLES,
+        model_filters=(32, 64, 128, 256, 320),
+    ),
+    "gpu80g": GpuProfileConfig(
+        name="gpu80g",
+        roi_size=(128, 128, 128),
+        num_samples=1,
+        model_filters=(32, 64, 128, 256, 320),
+    ),
+}
+DEFAULT_GPU_PROFILE_NAME = "gpu40g"
+GPU_PROFILE_ALIASES = {
+    "p100": "gpu16g",
+    "v100": "gpu32g",
+    "a100": "gpu40g",
+    "gpu16g": "gpu16g",
+    "gpu32g": "gpu32g",
+    "gpu40g": "gpu40g",
+    "gpu80g": "gpu80g",
+    "sxm4": "gpu80g",
+}
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Train a MONAI DynUNet on BraTS2020 NIfTI volumes"
+        description=(
+            "Train a MONAI DynUNet on BraTS 2020/2023/2024 volumes or "
+            "CancerVision standardized segmentation task manifests"
+        )
+    )
+    parser.add_argument(
+        "--gpu-profile",
+        choices=("auto", *GPU_PROFILE_CONFIGS.keys(), "p100", "v100", "a100", "sxm4"),
+        default="auto",
+        help=(
+            "Memory preset for DynUNet training. `auto` uses Slurm constraints or "
+            "detected GPU memory."
+        ),
+    )
+    parser.add_argument(
+        "--dataset-source",
+        choices=("brats", "cancervision_binary_seg"),
+        default="brats",
+        help="Input pipeline to use: raw BraTS folders or CancerVision segmentation task manifest.",
     )
     parser.add_argument(
         "--data-dir",
         type=str,
         default=os.path.normpath(str(DEFAULT_DATA_DIR)),
-        help="Path to MICCAI_BraTS2020_TrainingData containing patient dirs",
+        help="Path to BraTS 2020/2023/2024 root containing patient dirs.",
+    )
+    parser.add_argument(
+        "--task-manifest",
+        type=str,
+        default=os.path.normpath(str(DEFAULT_CANCERVISION_TASK_MANIFEST)),
+        help=(
+            "Path to CancerVision segmentation task manifest CSV. Used when "
+            "--dataset-source=cancervision_binary_seg."
+        ),
     )
     parser.add_argument(
         "--save-dir",
@@ -132,14 +223,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--roi-size",
         type=int,
         nargs=3,
-        default=[128, 128, 128],
+        default=None,
         help="Random crop ROI size as three integers",
     )
     parser.add_argument(
         "--num-samples",
         type=int,
-        default=4,
+        default=None,
         help="Number of random crops per volume per iteration",
+    )
+    parser.add_argument(
+        "--model-filters",
+        type=int,
+        nargs=5,
+        default=None,
+        help="DynUNet filter widths for downsample levels.",
     )
     parser.add_argument(
         "--train-micro-batch-size",
@@ -159,7 +257,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--val-sw-batch-size",
         type=int,
-        default=DEFAULT_VAL_SW_BATCH_SIZE,
+        default=None,
         help="Sliding-window batch size used during validation inference",
     )
     parser.add_argument(
@@ -183,48 +281,108 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def find_nifti(directory: str, pattern: str) -> str:
-    for ext in (".nii", ".nii.gz"):
-        candidate = os.path.join(directory, pattern + ext)
-        if os.path.isfile(candidate):
-            return candidate
-    raise FileNotFoundError(
-        f"Could not find NIfTI file for pattern '{pattern}' in {directory}"
-    )
-
-
 def build_data_dicts(data_dir: str) -> list[dict[str, list[str] | str]]:
-    data_dicts: list[dict[str, list[str] | str]] = []
-    if not os.path.isdir(data_dir):
-        raise FileNotFoundError(f"Data directory does not exist: {data_dir}")
+    return build_brats_data_dicts(data_dir)
 
-    patient_dirs = sorted(
-        d
-        for d in os.listdir(data_dir)
-        if os.path.isdir(os.path.join(data_dir, d)) and d.startswith("BraTS20_Training_")
-    )
 
-    for patient_name in patient_dirs:
-        patient_path = os.path.join(data_dir, patient_name)
+def _read_csv_rows(path: str | Path) -> list[dict[str, str]]:
+    source = Path(path)
+    with source.open(newline="", encoding="utf-8") as handle:
+        return [
+            {key: (value or "").strip() for key, value in row.items()}
+            for row in csv.DictReader(handle)
+        ]
+
+
+def _looks_like_windows_drive_path(path_text: str) -> bool:
+    return bool(WINDOWS_DRIVE_PATTERN.match(path_text))
+
+
+def _resolve_manifest_data_path(
+    raw_path: str,
+    *,
+    manifest_dir: Path,
+    field_name: str,
+    case_id: str,
+) -> str:
+    candidates: list[str | Path] = []
+    if raw_path:
+        if Path(raw_path).is_absolute() or _looks_like_windows_drive_path(raw_path):
+            candidates.append(raw_path)
+        else:
+            candidates.append(manifest_dir / raw_path)
+            candidates.append(raw_path)
+
+    for candidate in candidates:
         try:
-            flair = find_nifti(patient_path, f"{patient_name}_flair")
-            t1 = find_nifti(patient_path, f"{patient_name}_t1")
-            t1ce = find_nifti(patient_path, f"{patient_name}_t1ce")
-            t2 = find_nifti(patient_path, f"{patient_name}_t2")
-            seg = find_nifti(patient_path, f"{patient_name}_seg")
-        except FileNotFoundError as exc:
-            print(f"WARNING: skipping {patient_name} -- {exc}", flush=True)
+            return os.path.normpath(str(resolve_existing_path(candidate)))
+        except FileNotFoundError:
             continue
 
-        data_dicts.append({"image": [flair, t1, t1ce, t2], "label": seg})
-
-    if not data_dicts:
-        raise FileNotFoundError(f"No valid BraTS patient folders found in {data_dir}")
-
-    return data_dicts
+    joined_candidates = ", ".join(str(candidate) for candidate in candidates) or "<empty>"
+    raise FileNotFoundError(
+        f"Missing {field_name} for manifest case '{case_id}'. Checked: {joined_candidates}"
+    )
 
 
-def get_train_transforms(roi_size: Sequence[int], num_samples: int) -> Compose:
+def build_cancervision_segmentation_splits(
+    task_manifest_path: str | Path,
+) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
+    manifest_path = Path(task_manifest_path)
+    rows = _read_csv_rows(manifest_path)
+    manifest_dir = manifest_path.parent
+    allowed_splits = {"train", "val", "test"}
+    seen_case_ids: set[str] = set()
+    split_rows = {split: [] for split in allowed_splits}
+
+    for index, row in enumerate(rows, start=1):
+        if row.get("exclude_reason"):
+            continue
+        if not row.get("image_path") or not row.get("mask_path"):
+            continue
+
+        split_name = (row.get("task_split") or "").strip().lower()
+        case_id = (
+            row.get("global_case_id")
+            or row.get("subject_id")
+            or row.get("image_path")
+            or f"row_{index}"
+        )
+        if split_name not in allowed_splits:
+            raise RuntimeError(
+                f"Unsupported task_split '{row.get('task_split', '')}' for case '{case_id}' "
+                f"in manifest {manifest_path}. Expected one of {sorted(allowed_splits)}."
+            )
+        if case_id in seen_case_ids:
+            raise RuntimeError(
+                f"Duplicate case '{case_id}' found in CancerVision task manifest: {manifest_path}"
+            )
+        seen_case_ids.add(case_id)
+
+        split_rows[split_name].append(
+            {
+                "image": _resolve_manifest_data_path(
+                    row["image_path"],
+                    manifest_dir=manifest_dir,
+                    field_name="image_path",
+                    case_id=case_id,
+                ),
+                "label": _resolve_manifest_data_path(
+                    row["mask_path"],
+                    manifest_dir=manifest_dir,
+                    field_name="mask_path",
+                    case_id=case_id,
+                ),
+            }
+        )
+
+    train_rows = split_rows["train"]
+    val_rows = split_rows["val"]
+    test_rows = split_rows["test"]
+    return train_rows, val_rows, test_rows
+
+
+def get_brats_train_transforms(roi_size: Sequence[int], num_samples: int) -> Compose:
     return Compose(
         [
             LoadImaged(keys=["image", "label"]),
@@ -250,7 +408,7 @@ def get_train_transforms(roi_size: Sequence[int], num_samples: int) -> Compose:
     )
 
 
-def get_val_transforms() -> Compose:
+def get_brats_val_transforms() -> Compose:
     return Compose(
         [
             LoadImaged(keys=["image", "label"]),
@@ -261,15 +419,92 @@ def get_val_transforms() -> Compose:
     )
 
 
-def build_model() -> DynUNet:
+def get_cancervision_binary_seg_train_transforms(
+    roi_size: Sequence[int],
+    num_samples: int,
+) -> Compose:
+    return Compose(
+        [
+            LoadImaged(keys=["image", "label"]),
+            EnsureChannelFirstd(keys=["image", "label"]),
+            BinarizeLabeld(keys="label"),
+            EnsureFloatLabeld(keys="label"),
+            NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
+            RandCropByPosNegLabeld(
+                keys=["image", "label"],
+                label_key="label",
+                spatial_size=roi_size,
+                pos=1,
+                neg=1,
+                num_samples=num_samples,
+                image_key="image",
+                image_threshold=0,
+            ),
+            RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
+            RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
+            RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),
+            RandScaleIntensityd(keys="image", factors=0.1, prob=1.0),
+            RandShiftIntensityd(keys="image", offsets=0.1, prob=1.0),
+        ]
+    )
+
+
+def get_cancervision_binary_seg_val_transforms() -> Compose:
+    return Compose(
+        [
+            LoadImaged(keys=["image", "label"]),
+            EnsureChannelFirstd(keys=["image", "label"]),
+            BinarizeLabeld(keys="label"),
+            EnsureFloatLabeld(keys="label"),
+            NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
+        ]
+    )
+
+
+def get_dataset_config(dataset_source: str) -> DatasetConfig:
+    if dataset_source == "brats":
+        return DatasetConfig(
+            name="brats",
+            in_channels=4,
+            out_channels=3,
+            metric_names=("tc", "wt", "et"),
+            train_transform_builder=get_brats_train_transforms,
+            val_transform_builder=get_brats_val_transforms,
+        )
+    if dataset_source == "cancervision_binary_seg":
+        return DatasetConfig(
+            name="cancervision_binary_seg",
+            in_channels=1,
+            out_channels=1,
+            metric_names=("lesion",),
+            train_transform_builder=get_cancervision_binary_seg_train_transforms,
+            val_transform_builder=get_cancervision_binary_seg_val_transforms,
+        )
+    raise ValueError(f"Unsupported dataset source: {dataset_source}")
+
+
+def build_model(*, in_channels: int = 4, out_channels: int = 3) -> DynUNet:
+    return build_model_with_filters(
+        in_channels=in_channels,
+        out_channels=out_channels,
+        filters=GPU_PROFILE_CONFIGS[DEFAULT_GPU_PROFILE_NAME].model_filters,
+    )
+
+
+def build_model_with_filters(
+    *,
+    in_channels: int = 4,
+    out_channels: int = 3,
+    filters: Sequence[int],
+) -> DynUNet:
     return DynUNet(
         spatial_dims=3,
-        in_channels=4,
-        out_channels=3,
+        in_channels=in_channels,
+        out_channels=out_channels,
         kernel_size=[3, 3, 3, 3, 3],
         strides=[1, 2, 2, 2, 2],
         upsample_kernel_size=[2, 2, 2, 2],
-        filters=[32, 64, 128, 256, 320],
+        filters=list(filters),
         dropout=0.2,
         res_block=True,
         deep_supervision=False,
@@ -280,9 +515,14 @@ def build_run_name(args: argparse.Namespace) -> str:
     if args.run_name:
         return args.run_name
     job_id = os.environ.get("SLURM_JOB_ID")
+    run_prefix = (
+        "dynunet-cancervision"
+        if args.dataset_source == "cancervision_binary_seg"
+        else "dynunet-brats"
+    )
     if job_id:
-        return f"dynunet-brats-{job_id}"
-    return f"dynunet-brats-{time.strftime('%Y%m%d-%H%M%S')}"
+        return f"{run_prefix}-{job_id}"
+    return f"{run_prefix}-{time.strftime('%Y%m%d-%H%M%S')}"
 
 
 def is_main_process(context: RuntimeContext) -> bool:
@@ -291,39 +531,6 @@ def is_main_process(context: RuntimeContext) -> bool:
 
 def should_use_amp(args: argparse.Namespace, context: RuntimeContext) -> bool:
     return bool(args.amp and context.device.type == "cuda")
-
-
-def _parse_env_int(value: str | None) -> int | None:
-    if value is None:
-        return None
-    value = value.strip()
-    if not value.isdigit():
-        return None
-    return int(value)
-
-
-def _count_csv_entries(value: str | None) -> int | None:
-    if value is None:
-        return None
-    entries = [entry.strip() for entry in value.split(",") if entry.strip()]
-    return len(entries) if entries else None
-
-
-def detect_allocated_gpu_count(env: Mapping[str, str] | None = None) -> int | None:
-    env = os.environ if env is None else env
-    slurm_gpus_on_node = _parse_env_int(env.get("SLURM_GPUS_ON_NODE"))
-    if slurm_gpus_on_node is not None:
-        return slurm_gpus_on_node
-
-    slurm_step_gpus = _count_csv_entries(env.get("SLURM_STEP_GPUS"))
-    if slurm_step_gpus is not None:
-        return slurm_step_gpus
-
-    cuda_visible_devices = _count_csv_entries(env.get("CUDA_VISIBLE_DEVICES"))
-    if cuda_visible_devices is not None:
-        return cuda_visible_devices
-
-    return None
 
 
 def _format_launch_env(env: Mapping[str, str]) -> str:
@@ -341,126 +548,133 @@ def _format_launch_env(env: Mapping[str, str]) -> str:
     return ", ".join(f"{key}={env.get(key, '<unset>')}" for key in keys)
 
 
-def resolve_distributed_launch_config(
+def normalize_gpu_profile_name(profile_name: str) -> str:
+    normalized = profile_name.strip().lower()
+    try:
+        return GPU_PROFILE_ALIASES[normalized]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported GPU profile '{profile_name}'") from exc
+
+
+def detect_gpu_profile_from_constraints(
     env: Mapping[str, str] | None = None,
-    *,
-    cuda_available: bool,
-    visible_gpu_count: int,
-) -> DistributedLaunchConfig:
+) -> str | None:
     env = os.environ if env is None else env
-
-    world_size = int(env.get("WORLD_SIZE", env.get("SLURM_NTASKS", "1")))
-    rank = int(env.get("RANK", env.get("SLURM_PROCID", "0")))
-    local_rank = int(env.get("LOCAL_RANK", env.get("SLURM_LOCALID", "0")))
-    distributed = world_size > 1
-    allocated_gpu_count = detect_allocated_gpu_count(env)
-
-    if not distributed:
-        return DistributedLaunchConfig(
-            world_size=world_size,
-            rank=rank,
-            local_rank=local_rank,
-            distributed=False,
-            allocated_gpu_count=allocated_gpu_count,
-            visible_gpu_count=visible_gpu_count,
-            device_index=None,
+    raw_constraints = " ".join(
+        value
+        for value in (
+            env.get("SLURM_JOB_CONSTRAINTS"),
+            env.get("SLURM_CONSTRAINT"),
+            env.get("SBATCH_CONSTRAINT"),
         )
+        if value
+    ).lower()
+    if not raw_constraints:
+        return None
 
-    if not cuda_available:
-        raise RuntimeError("Distributed training requires CUDA for this trainer.")
+    for profile_name in ("gpu80g", "gpu40g", "gpu32g", "gpu16g"):
+        if profile_name in raw_constraints:
+            return profile_name
+    for alias in ("sxm4", "a100", "v100", "p100"):
+        if alias in raw_constraints:
+            return normalize_gpu_profile_name(alias)
+    return None
 
-    if allocated_gpu_count is not None and allocated_gpu_count < world_size:
-        raise RuntimeError(
-            "Distributed launch misconfigured: allocated GPU count is smaller than "
-            f"world size (world_size={world_size}, allocated_gpu_count={allocated_gpu_count}, "
-            f"rank={rank}, local_rank={local_rank}). Relevant env: {_format_launch_env(env)}"
-        )
 
-    if visible_gpu_count < 1:
-        raise RuntimeError(
-            "Distributed training requires at least one CUDA-visible GPU per process "
-            f"(visible_gpu_count={visible_gpu_count}, rank={rank}, local_rank={local_rank}, "
-            f"allocated_gpu_count={allocated_gpu_count}). Relevant env: {_format_launch_env(env)}"
-        )
-
-    if visible_gpu_count == 1 and (
-        allocated_gpu_count is None or allocated_gpu_count >= world_size
-    ):
-        device_index = 0
-    elif local_rank < visible_gpu_count:
-        device_index = local_rank
-    else:
-        raise RuntimeError(
-            "Unable to map local rank to a CUDA device "
-            f"(rank={rank}, local_rank={local_rank}, world_size={world_size}, "
-            f"visible_gpu_count={visible_gpu_count}, allocated_gpu_count={allocated_gpu_count}). "
-            f"Relevant env: {_format_launch_env(env)}"
-        )
-
-    return DistributedLaunchConfig(
-        world_size=world_size,
-        rank=rank,
-        local_rank=local_rank,
-        distributed=True,
-        allocated_gpu_count=allocated_gpu_count,
-        visible_gpu_count=visible_gpu_count,
-        device_index=device_index,
+def detect_gpu_profile_from_device(context: RuntimeContext) -> str | None:
+    if context.device.type != "cuda":
+        return None
+    total_memory_gib = (
+        torch.cuda.get_device_properties(context.device).total_memory / (1024**3)
     )
+    if total_memory_gib <= 20:
+        return "gpu16g"
+    if total_memory_gib <= 36:
+        return "gpu32g"
+    if total_memory_gib <= 48:
+        return "gpu40g"
+    return "gpu80g"
+
+
+def resolve_gpu_profile(
+    requested_profile: str,
+    context: RuntimeContext,
+    env: Mapping[str, str] | None = None,
+) -> GpuProfileConfig:
+    if requested_profile != "auto":
+        return GPU_PROFILE_CONFIGS[normalize_gpu_profile_name(requested_profile)]
+
+    detected_from_constraints = detect_gpu_profile_from_constraints(env)
+    if detected_from_constraints is not None:
+        return GPU_PROFILE_CONFIGS[detected_from_constraints]
+
+    detected_from_device = detect_gpu_profile_from_device(context)
+    if detected_from_device is not None:
+        return GPU_PROFILE_CONFIGS[detected_from_device]
+
+    return GPU_PROFILE_CONFIGS[DEFAULT_GPU_PROFILE_NAME]
+
+
+def apply_gpu_profile_defaults(
+    args: argparse.Namespace,
+    context: RuntimeContext,
+    env: Mapping[str, str] | None = None,
+) -> GpuProfileConfig:
+    profile = resolve_gpu_profile(args.gpu_profile, context, env)
+    if args.roi_size is None:
+        args.roi_size = list(profile.roi_size)
+    if args.num_samples is None:
+        args.num_samples = profile.num_samples
+    if args.model_filters is None:
+        args.model_filters = list(profile.model_filters)
+    if args.val_sw_batch_size is None:
+        args.val_sw_batch_size = profile.val_sw_batch_size
+    return profile
+
+
+def detect_requested_world_size(env: Mapping[str, str] | None = None) -> int:
+    env = os.environ if env is None else env
+    return int(env.get("WORLD_SIZE", env.get("SLURM_NTASKS", "1")))
 
 
 def setup_device_and_distributed() -> RuntimeContext:
-    cuda_available = torch.cuda.is_available()
-    visible_gpu_count = torch.cuda.device_count() if cuda_available else 0
-    launch_config = resolve_distributed_launch_config(
-        cuda_available=cuda_available,
-        visible_gpu_count=visible_gpu_count,
-    )
-
-    if launch_config.distributed:
-        os.environ.setdefault("WORLD_SIZE", str(launch_config.world_size))
-        os.environ.setdefault("RANK", str(launch_config.rank))
-        os.environ.setdefault("LOCAL_RANK", str(launch_config.local_rank))
-        os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
-        os.environ.setdefault("MASTER_PORT", "29500")
-        assert launch_config.device_index is not None
-        torch.cuda.set_device(launch_config.device_index)
-        dist.init_process_group(
-            backend="nccl",
-            init_method="env://",
-            rank=launch_config.rank,
-            world_size=launch_config.world_size,
+    env = os.environ
+    requested_world_size = detect_requested_world_size(env)
+    rank = int(env.get("RANK", env.get("SLURM_PROCID", "0")))
+    local_rank = int(env.get("LOCAL_RANK", env.get("SLURM_LOCALID", "0")))
+    if requested_world_size > 1 or rank != 0 or local_rank != 0:
+        raise RuntimeError(
+            "This trainer supports single-process single-GPU runs only. "
+            f"Launch with one task and one GPU. Relevant env: {_format_launch_env(env)}"
         )
-        device = torch.device("cuda", launch_config.device_index)
-        device_index = launch_config.device_index
+
+    if torch.cuda.is_available():
+        torch.cuda.set_device(0)
+        device = torch.device("cuda:0")
+        device_index = 0
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = torch.device("mps")
+        device_index = None
     else:
-        if cuda_available:
-            device = torch.device("cuda:0")
-            device_index = 0
-        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            device = torch.device("mps")
-            device_index = None
-        else:
-            device = torch.device("cpu")
-            device_index = None
+        device = torch.device("cpu")
+        device_index = None
 
     return RuntimeContext(
         device=device,
         device_index=device_index,
-        distributed=launch_config.distributed,
-        rank=launch_config.rank,
-        local_rank=launch_config.local_rank,
-        world_size=launch_config.world_size,
+        distributed=False,
+        rank=0,
+        local_rank=0,
+        world_size=1,
     )
 
 
 def cleanup_distributed(context: RuntimeContext) -> None:
-    if context.distributed and dist.is_initialized():
-        dist.destroy_process_group()
+    return None
 
 
 def synchronize(context: RuntimeContext) -> None:
-    if context.distributed and dist.is_initialized():
-        dist.barrier()
+    return None
 
 
 def rank0_print(context: RuntimeContext, message: str) -> None:
@@ -524,11 +738,36 @@ def build_micro_batch_slices(total_batch_size: int, requested_micro_batch_size: 
 
 
 def reduce_mean(value: float, count: int, context: RuntimeContext) -> float:
-    if not context.distributed:
-        return value / max(count, 1)
-    reduced = torch.tensor([value, float(count)], device=context.device)
-    dist.all_reduce(reduced, op=dist.ReduceOp.SUM)
-    return (reduced[0] / reduced[1].clamp_min(1.0)).item()
+    return value / max(count, 1)
+
+
+def build_dataset_splits(
+    args: argparse.Namespace,
+) -> tuple[list[dict[str, list[str] | str]], list[dict[str, list[str] | str]], list[dict[str, list[str] | str]]]:
+    if args.dataset_source == "brats":
+        data_dir = os.path.normpath(args.data_dir)
+        data_dicts = build_data_dicts(data_dir)
+        train_dicts, val_dicts = train_test_split(
+            data_dicts, test_size=args.test_size, random_state=args.seed
+        )
+        return train_dicts, val_dicts, []
+
+    if args.dataset_source == "cancervision_binary_seg":
+        task_manifest = os.path.normpath(args.task_manifest)
+        train_dicts, val_dicts, test_dicts = build_cancervision_segmentation_splits(
+            task_manifest
+        )
+        if not train_dicts:
+            raise RuntimeError(
+                f"No train rows found in CancerVision task manifest: {task_manifest}"
+            )
+        if not val_dicts:
+            raise RuntimeError(
+                f"No val rows found in CancerVision task manifest: {task_manifest}"
+            )
+        return train_dicts, val_dicts, test_dicts
+
+    raise ValueError(f"Unsupported dataset source: {args.dataset_source}")
 
 
 def load_resume_state(
@@ -547,7 +786,7 @@ def load_resume_state(
         raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
 
     checkpoint = torch.load(path, map_location=context.device)
-    model_to_load = model.module if isinstance(model, DistributedDataParallel) else model
+    model_to_load = model
 
     if isinstance(checkpoint, dict) and "model_state" in checkpoint:
         model_to_load.load_state_dict(checkpoint["model_state"])
@@ -576,7 +815,7 @@ def save_last_checkpoint(
     best_metric: float,
     best_metric_epoch: int,
 ) -> None:
-    model_state = model.module.state_dict() if isinstance(model, DistributedDataParallel) else model.state_dict()
+    model_state = model.state_dict()
     checkpoint = {
         "epoch": epoch,
         "model_state": model_state,
@@ -599,11 +838,7 @@ def train_one_epoch(
     epoch: int,
     args: argparse.Namespace,
     context: RuntimeContext,
-    train_sampler: DistributedSampler | None,
 ) -> tuple[float, float]:
-    if train_sampler is not None:
-        train_sampler.set_epoch(epoch)
-
     model.train()
     epoch_loss = 0.0
     step_count = 0
@@ -611,8 +846,8 @@ def train_one_epoch(
     for step, batch_data in enumerate(train_loader, start=1):
         step_start = time.time()
         step_count += 1
-        inputs = batch_data["image"].to(context.device, non_blocking=True)
-        labels = batch_data["label"].to(context.device, non_blocking=True)
+        inputs = batch_data["image"]
+        labels = batch_data["label"]
         micro_batch_slices = build_micro_batch_slices(
             total_batch_size=inputs.shape[0],
             requested_micro_batch_size=args.train_micro_batch_size,
@@ -621,10 +856,11 @@ def train_one_epoch(
         optimizer.zero_grad(set_to_none=True)
         loss = None
         step_loss = 0.0
-        # MONAI collates `num_samples` crops into batch dimension; split them to cap activation memory.
+        # Keep full collated batch on CPU and move one micro-batch at a time to the GPU.
+        # This lets us spend memory on larger 3D crops instead of staging every crop at once.
         for batch_slice in micro_batch_slices:
-            micro_inputs = inputs[batch_slice]
-            micro_labels = labels[batch_slice]
+            micro_inputs = inputs[batch_slice].to(context.device, non_blocking=True)
+            micro_labels = labels[batch_slice].to(context.device, non_blocking=True)
             micro_weight = micro_inputs.shape[0] / inputs.shape[0]
 
             with get_autocast_context(context, should_use_amp(args, context)):
@@ -670,14 +906,14 @@ def validate(
     roi_size: Sequence[int],
     args: argparse.Namespace,
     context: RuntimeContext,
+    dataset_config: DatasetConfig,
 ) -> dict[str, float] | None:
     if not is_main_process(context) or val_loader is None:
         return None
 
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     dice_metric_batch = DiceMetric(include_background=True, reduction="mean_batch")
-    predictor = model.module if isinstance(model, DistributedDataParallel) else model
-    predictor.eval()
+    model.eval()
 
     with torch.no_grad():
         for val_data in val_loader:
@@ -688,7 +924,7 @@ def validate(
                     val_inputs,
                     roi_size=roi_size,
                     sw_batch_size=args.val_sw_batch_size,
-                    predictor=predictor,
+                    predictor=model,
                     overlap=0.5,
                 )
             val_outputs_list = [post_trans(item) for item in decollate_batch(val_outputs)]
@@ -701,21 +937,27 @@ def validate(
     dice_metric.reset()
     dice_metric_batch.reset()
 
-    return {
-        "dice_mean": metric,
-        "dice_tc": metric_batch[0].item(),
-        "dice_wt": metric_batch[1].item(),
-        "dice_et": metric_batch[2].item(),
-    }
+    metrics = {"dice_mean": metric}
+    for index, metric_name in enumerate(dataset_config.metric_names):
+        metrics[f"dice_{metric_name}"] = metric_batch[index].item()
+    return metrics
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
+    context = setup_device_and_distributed()
+    if context.device.type == "cuda":
+        os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+        torch.cuda.empty_cache()
+    gpu_profile = apply_gpu_profile_defaults(args, context)
     if args.train_micro_batch_size < 1:
         raise ValueError("--train-micro-batch-size must be at least 1")
     if args.val_sw_batch_size < 1:
         raise ValueError("--val-sw-batch-size must be at least 1")
-    context = setup_device_and_distributed()
+    if len(args.roi_size) != 3 or any(size < 32 for size in args.roi_size):
+        raise ValueError("--roi-size must contain three integers >= 32")
+    if len(args.model_filters) != 5 or any(width < 8 for width in args.model_filters):
+        raise ValueError("--model-filters must contain five integers >= 8")
 
     run_name = build_run_name(args)
     run_dir = Path(args.save_dir).resolve() / run_name
@@ -728,39 +970,40 @@ def main(argv: Sequence[str] | None = None) -> None:
         if is_main_process(context):
             print_config()
         set_determinism(seed=args.seed)
+        dataset_config = get_dataset_config(args.dataset_source)
 
         rank0_print(context, f"Using device: {context.device}")
         rank0_print(context, f"Distributed: {context.distributed} (world_size={context.world_size})")
+        rank0_print(context, f"GPU profile    : {gpu_profile.name}")
         rank0_print(context, f"Run directory: {run_dir}")
-
-        data_dir = os.path.normpath(args.data_dir)
-        rank0_print(context, f"Data directory : {data_dir}")
-        rank0_print(context, f"Exists         : {os.path.isdir(data_dir)}")
+        rank0_print(context, f"Dataset source : {args.dataset_source}")
+        if args.dataset_source == "brats":
+            data_dir = os.path.normpath(args.data_dir)
+            rank0_print(context, f"Data directory : {data_dir}")
+            rank0_print(context, f"Exists         : {os.path.isdir(data_dir)}")
+        else:
+            task_manifest = os.path.normpath(args.task_manifest)
+            rank0_print(context, f"Task manifest  : {task_manifest}")
+            rank0_print(context, f"Exists         : {os.path.isfile(task_manifest)}")
         rank0_print(context, f"Train micro-batch size: {args.train_micro_batch_size}")
         rank0_print(context, f"Validation sw_batch_size: {args.val_sw_batch_size}")
+        rank0_print(context, f"ROI size       : {tuple(args.roi_size)}")
+        rank0_print(context, f"Num samples    : {args.num_samples}")
+        rank0_print(context, f"Model filters  : {tuple(args.model_filters)}")
 
-        data_dicts = build_data_dicts(data_dir)
-        rank0_print(context, f"Total patients : {len(data_dicts)}")
-        train_dicts, val_dicts = train_test_split(
-            data_dicts, test_size=args.test_size, random_state=args.seed
+        train_dicts, val_dicts, test_dicts = build_dataset_splits(args)
+        rank0_print(
+            context,
+            f"Train cases    : {len(train_dicts)}",
         )
-        rank0_print(context, f"Train patients : {len(train_dicts)}")
-        rank0_print(context, f"Val patients   : {len(val_dicts)}")
+        rank0_print(context, f"Val cases      : {len(val_dicts)}")
+        if args.dataset_source == "cancervision_binary_seg":
+            rank0_print(context, f"Test cases     : {len(test_dicts)}")
 
         roi_size = tuple(args.roi_size)
         train_ds = Dataset(
             data=train_dicts,
-            transform=get_train_transforms(roi_size, args.num_samples),
-        )
-        train_sampler = (
-            DistributedSampler(
-                train_ds,
-                num_replicas=context.world_size,
-                rank=context.rank,
-                shuffle=True,
-            )
-            if context.distributed
-            else None
+            transform=dataset_config.train_transform_builder(roi_size, args.num_samples),
         )
 
         num_workers = min(args.num_workers, os.cpu_count() or 1)
@@ -768,34 +1011,38 @@ def main(argv: Sequence[str] | None = None) -> None:
         train_loader = DataLoader(
             train_ds,
             batch_size=args.batch_size,
-            shuffle=train_sampler is None,
-            sampler=train_sampler,
+            shuffle=True,
             num_workers=num_workers,
             collate_fn=list_data_collate,
             persistent_workers=num_workers > 0,
             pin_memory=pin_memory,
         )
 
-        val_loader: DataLoader | None = None
-        if is_main_process(context):
-            val_ds = Dataset(data=val_dicts, transform=get_val_transforms())
-            val_loader = DataLoader(
-                val_ds,
-                batch_size=1,
-                shuffle=False,
-                num_workers=num_workers,
-                persistent_workers=num_workers > 0,
-                pin_memory=pin_memory,
-            )
+        val_ds = Dataset(
+            data=val_dicts,
+            transform=dataset_config.val_transform_builder(),
+        )
+        val_loader = DataLoader(
+            val_ds,
+            batch_size=1,
+            shuffle=False,
+            num_workers=num_workers,
+            persistent_workers=num_workers > 0,
+            pin_memory=pin_memory,
+        )
 
-        model = build_model().to(context.device)
-        if context.distributed:
-            assert context.device_index is not None
-            model = DistributedDataParallel(
-                model,
-                device_ids=[context.device_index],
-                output_device=context.device_index,
-            )
+        try:
+            model = build_model_with_filters(
+                in_channels=dataset_config.in_channels,
+                out_channels=dataset_config.out_channels,
+                filters=args.model_filters,
+            ).to(context.device)
+        except torch.OutOfMemoryError as exc:
+            raise RuntimeError(
+                "OOM while initializing DynUNet. Try smaller --roi-size "
+                "(for example 96 96 96 or 64 64 64), keep --num-samples 1, "
+                "and make sure Slurm launches exactly one task on one GPU."
+            ) from exc
 
         loss_function = DiceLoss(
             smooth_nr=0,
@@ -833,20 +1080,32 @@ def main(argv: Sequence[str] | None = None) -> None:
 
         wandb_config = {
             "run_name": run_name,
+            "dataset_source": args.dataset_source,
+            "data_dir": os.path.normpath(args.data_dir)
+            if args.dataset_source == "brats"
+            else "",
+            "task_manifest": os.path.normpath(args.task_manifest)
+            if args.dataset_source == "cancervision_binary_seg"
+            else "",
+            "in_channels": dataset_config.in_channels,
+            "out_channels": dataset_config.out_channels,
             "max_epochs": args.max_epochs,
             "batch_size": args.batch_size,
             "lr": args.lr,
             "weight_decay": args.weight_decay,
             "val_interval": args.val_interval,
             "seed": args.seed,
+            "gpu_profile": gpu_profile.name,
             "roi_size": list(roi_size),
             "num_samples": args.num_samples,
+            "model_filters": list(args.model_filters),
             "train_micro_batch_size": args.train_micro_batch_size,
             "test_size": args.test_size,
             "amp": args.amp,
             "val_sw_batch_size": args.val_sw_batch_size,
             "distributed": context.distributed,
             "world_size": context.world_size,
+            "single_gpu_only": True,
         }
         wandb_run = maybe_init_wandb(args, context, wandb_config)
 
@@ -855,18 +1114,23 @@ def main(argv: Sequence[str] | None = None) -> None:
             rank0_print(context, "-" * 40)
             rank0_print(context, f"Epoch {epoch + 1}/{args.max_epochs}")
 
-            avg_loss, current_lr = train_one_epoch(
-                model=model,
-                train_loader=train_loader,
-                loss_function=loss_function,
-                optimizer=optimizer,
-                scaler=scaler,
-                scheduler=scheduler,
-                epoch=epoch,
-                args=args,
-                context=context,
-                train_sampler=train_sampler,
-            )
+            try:
+                avg_loss, current_lr = train_one_epoch(
+                    model=model,
+                    train_loader=train_loader,
+                    loss_function=loss_function,
+                    optimizer=optimizer,
+                    scaler=scaler,
+                    scheduler=scheduler,
+                    epoch=epoch,
+                    args=args,
+                    context=context,
+                )
+            except torch.OutOfMemoryError as exc:
+                raise RuntimeError(
+                    "CUDA OOM during training step. Reduce --roi-size, keep "
+                    "--num-samples 1, and do not launch more than one Slurm task."
+                ) from exc
 
             if is_main_process(context):
                 print(f"  avg loss: {avg_loss:.4f}  lr: {current_lr:.2e}", flush=True)
@@ -878,25 +1142,27 @@ def main(argv: Sequence[str] | None = None) -> None:
                     }
                 )
 
-            synchronize(context)
             if (epoch + 1) % args.val_interval == 0:
-                metrics = validate(
-                    model=model,
-                    val_loader=val_loader,
-                    post_trans=post_trans,
-                    roi_size=roi_size,
-                    args=args,
-                    context=context,
-                )
+                try:
+                    metrics = validate(
+                        model=model,
+                        val_loader=val_loader,
+                        post_trans=post_trans,
+                        roi_size=roi_size,
+                        args=args,
+                        context=context,
+                        dataset_config=dataset_config,
+                    )
+                except torch.OutOfMemoryError as exc:
+                    raise RuntimeError(
+                        "CUDA OOM during validation. Lower --roi-size first; "
+                        "--val-sw-batch-size is already safest at 1."
+                    ) from exc
                 if is_main_process(context) and metrics is not None:
                     if metrics["dice_mean"] > best_metric:
                         best_metric = metrics["dice_mean"]
                         best_metric_epoch = epoch + 1
-                        model_state = (
-                            model.module.state_dict()
-                            if isinstance(model, DistributedDataParallel)
-                            else model.state_dict()
-                        )
+                        model_state = model.state_dict()
                         torch.save(model_state, run_dir / "best_metric_model.pth")
                         print(
                             f"  -> saved new best model to {run_dir / 'best_metric_model.pth'}",
@@ -906,18 +1172,21 @@ def main(argv: Sequence[str] | None = None) -> None:
                     wandb_run.log(
                         {
                             "val/dice_mean": metrics["dice_mean"],
-                            "val/dice_tc": metrics["dice_tc"],
-                            "val/dice_wt": metrics["dice_wt"],
-                            "val/dice_et": metrics["dice_et"],
+                            **{
+                                f"val/dice_{metric_name}": metrics[f"dice_{metric_name}"]
+                                for metric_name in dataset_config.metric_names
+                            },
                             "val/best_dice": best_metric,
                             "epoch": epoch + 1,
                         }
                     )
+                    metric_summary = " ".join(
+                        f"{metric_name.upper()}={metrics[f'dice_{metric_name}']:.4f}"
+                        for metric_name in dataset_config.metric_names
+                    )
                     print(
                         f"  val dice: {metrics['dice_mean']:.4f}"
-                        f"  (TC={metrics['dice_tc']:.4f}"
-                        f"  WT={metrics['dice_wt']:.4f}"
-                        f"  ET={metrics['dice_et']:.4f})"
+                        f"  ({metric_summary})"
                         f"\n  best dice: {best_metric:.4f} @ epoch {best_metric_epoch}",
                         flush=True,
                     )
@@ -934,8 +1203,6 @@ def main(argv: Sequence[str] | None = None) -> None:
                     best_metric_epoch=best_metric_epoch,
                 )
                 print(f"  epoch time: {time.time() - epoch_start:.1f}s", flush=True)
-
-            synchronize(context)
 
         if is_main_process(context):
             total_time = time.time() - total_start

@@ -1,15 +1,15 @@
 #!/bin/bash
 #SBATCH --account=studiegrupper-cogito
-#SBATCH --job-name="Cancer Vision UNet 3D"
 #SBATCH --time=14:15:00
 #SBATCH --partition=GPUQ
-#SBATCH --job-name="dynunet-brats"
+#SBATCH --job-name="dynunet-cancervision-native"
 #SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:a100:1
 #SBATCH --mem=64G
-#SBATCH --cpus-per-task=4
-#SBATCH --output=slurm_terminal.out
-#SBATCH --error=slurm_terminal.err
+#SBATCH --cpus-per-task=8
+#SBATCH --output=slurm_outputs/%x-%j.out
+#SBATCH --error=slurm_outputs/%x-%j.err
 #SBATCH --mail-user=eldarja@ntnu.no
 #SBATCH --mail-type=FAIL
 
@@ -17,11 +17,12 @@ set -euo pipefail
 
 WORKDIR=${SLURM_SUBMIT_DIR:-.}
 cd "${WORKDIR}"
+mkdir -p slurm_outputs
+
 echo "Running from this directory: ${WORKDIR}"
-echo "Name of job: ${SLURM_JOB_NAME:-dynunet-brats}"
+echo "Name of job: ${SLURM_JOB_NAME:-dynunet-cancervision-native}"
 echo "ID of job: ${SLURM_JOB_ID:-local}"
 echo "The job was run on these nodes: ${SLURM_JOB_NODELIST:-local-node}"
-
 
 if [ ! -x "${WORKDIR}/.venv/bin/python" ]; then
   echo "Missing ${WORKDIR}/.venv/bin/python. Create the environment on the login node first."
@@ -35,43 +36,96 @@ if [ -f "${WORKDIR}/.env" ]; then
   set +a
 fi
 
-if [[ "${SLURM_GPUS_ON_NODE:-}" =~ ^[0-9]+$ ]]; then
-  GPU_COUNT="${SLURM_GPUS_ON_NODE}"
-elif [[ -n "${SLURM_STEP_GPUS:-}" ]]; then
-  IFS=',' read -r -a STEP_GPU_ARRAY <<< "${SLURM_STEP_GPUS}"
-  GPU_COUNT="${#STEP_GPU_ARRAY[@]}"
-elif [[ -n "${CUDA_VISIBLE_DEVICES:-}" ]]; then
-  IFS=',' read -r -a CUDA_VISIBLE_ARRAY <<< "${CUDA_VISIBLE_DEVICES}"
-  GPU_COUNT="${#CUDA_VISIBLE_ARRAY[@]}"
-else
-  GPU_COUNT=1
-fi
-
-echo "Detected GPU count: ${GPU_COUNT}"
+echo "Single-task launch only"
 
 export PYTHONPATH="${WORKDIR}:${PYTHONPATH:-}"
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK}"
 export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK}"
-export MASTER_ADDR="${MASTER_ADDR:-127.0.0.1}"
-export MASTER_PORT="${MASTER_PORT:-29500}"
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 echo "Python: ${WORKDIR}/.venv/bin/python"
-echo "MASTER_ADDR=${MASTER_ADDR}"
-echo "MASTER_PORT=${MASTER_PORT}"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
+echo "PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF}"
 
 WANDB_MODE_CLEAN="${WANDB_MODE:-online}"
 WANDB_MODE_CLEAN="${WANDB_MODE_CLEAN//$'\r'/}"
 WANDB_MODE_CLEAN="${WANDB_MODE_CLEAN//$'\n'/}"
+TASK_MANIFEST="${TASK_MANIFEST:-${WORKDIR}/res/dataset/cancervision-standardization/task_manifests/segmentation_binary_curated.csv}"
+TASK_MANIFEST="${TASK_MANIFEST//$'\r'/}"
+TASK_MANIFEST="${TASK_MANIFEST//$'\n'/}"
+
+GPU_MEMORY_MIB="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n 1 | tr -d '[:space:]')"
+if [ -z "${GPU_MEMORY_MIB}" ]; then
+  GPU_MEMORY_MIB=0
+fi
+
+# Native single-channel segmentation can usually spend more VRAM on larger crops.
+# Keep batch size, micro-batch size, and num_samples at 1 by default so memory goes to spatial context.
+if [ "${GPU_MEMORY_MIB}" -ge 70000 ]; then
+  DETECTED_GPU_PROFILE="gpu80g"
+  DEFAULT_ROI_SIZE="144 144 144"
+  DEFAULT_MODEL_FILTERS="32 64 128 256 320"
+elif [ "${GPU_MEMORY_MIB}" -ge 45000 ]; then
+  DETECTED_GPU_PROFILE="gpu40g"
+  DEFAULT_ROI_SIZE="128 128 128"
+  DEFAULT_MODEL_FILTERS="32 64 128 256 320"
+elif [ "${GPU_MEMORY_MIB}" -ge 30000 ]; then
+  DETECTED_GPU_PROFILE="gpu32g"
+  DEFAULT_ROI_SIZE="96 96 96"
+  DEFAULT_MODEL_FILTERS="24 48 96 192 256"
+else
+  DETECTED_GPU_PROFILE="gpu16g"
+  DEFAULT_ROI_SIZE="80 80 80"
+  DEFAULT_MODEL_FILTERS="16 32 64 128 192"
+fi
+
+GPU_PROFILE_CLEAN="${GPU_PROFILE:-${DETECTED_GPU_PROFILE}}"
+BATCH_SIZE_CLEAN="${BATCH_SIZE:-1}"
+TRAIN_MICRO_BATCH_SIZE_CLEAN="${TRAIN_MICRO_BATCH_SIZE:-1}"
+NUM_SAMPLES_CLEAN="${NUM_SAMPLES:-1}"
+VAL_SW_BATCH_SIZE_CLEAN="${VAL_SW_BATCH_SIZE:-1}"
+NUM_WORKERS_CLEAN="${NUM_WORKERS:-${SLURM_CPUS_PER_TASK}}"
+MAX_EPOCHS_CLEAN="${MAX_EPOCHS:-100}"
+VAL_INTERVAL_CLEAN="${VAL_INTERVAL:-1}"
+LR_CLEAN="${LR:-1e-4}"
+WEIGHT_DECAY_CLEAN="${WEIGHT_DECAY:-1e-5}"
+ROI_SIZE_CLEAN="${ROI_SIZE:-${DEFAULT_ROI_SIZE}}"
+MODEL_FILTERS_CLEAN="${MODEL_FILTERS:-${DEFAULT_MODEL_FILTERS}}"
+
+read -r -a ROI_SIZE_ARGS <<< "${ROI_SIZE_CLEAN}"
+read -r -a MODEL_FILTER_ARGS <<< "${MODEL_FILTERS_CLEAN}"
 
 nvidia-smi
+echo "Detected GPU memory (MiB): ${GPU_MEMORY_MIB}"
+echo "GPU profile: ${GPU_PROFILE_CLEAN}"
+echo "ROI size: ${ROI_SIZE_CLEAN}"
+echo "Model filters: ${MODEL_FILTERS_CLEAN}"
+echo "Batch size: ${BATCH_SIZE_CLEAN}"
+echo "Train micro-batch size: ${TRAIN_MICRO_BATCH_SIZE_CLEAN}"
+echo "Num samples: ${NUM_SAMPLES_CLEAN}"
+echo "Validation sw_batch_size: ${VAL_SW_BATCH_SIZE_CLEAN}"
+echo "Num workers: ${NUM_WORKERS_CLEAN}"
+echo "Task manifest: ${TASK_MANIFEST}"
 
-srun --ntasks="${GPU_COUNT}" --ntasks-per-node="${GPU_COUNT}" --gpus-per-task=1 \
+TRAIN_ARGS=(
+  --gpu-profile "${GPU_PROFILE_CLEAN}"
+  --dataset-source cancervision_binary_seg
+  --batch-size "${BATCH_SIZE_CLEAN}"
+  --train-micro-batch-size "${TRAIN_MICRO_BATCH_SIZE_CLEAN}"
+  --num-workers "${NUM_WORKERS_CLEAN}"
+  --num-samples "${NUM_SAMPLES_CLEAN}"
+  --val-sw-batch-size "${VAL_SW_BATCH_SIZE_CLEAN}"
+  --max-epochs "${MAX_EPOCHS_CLEAN}"
+  --val-interval "${VAL_INTERVAL_CLEAN}"
+  --lr "${LR_CLEAN}"
+  --weight-decay "${WEIGHT_DECAY_CLEAN}"
+  --wandb-mode "${WANDB_MODE_CLEAN}"
+  --run-name "dynunet-cancervision-native-${SLURM_JOB_ID:-local}"
+  --task-manifest "${TASK_MANIFEST}"
+  --roi-size "${ROI_SIZE_ARGS[@]}"
+  --model-filters "${MODEL_FILTER_ARGS[@]}"
+)
+
+srun --ntasks=1 --ntasks-per-node=1 --gpus-per-task=1 \
   "${WORKDIR}/.venv/bin/python" -m src.models.dynnet \
-  --batch-size 1 \
-  --num-samples 4 \
-  --roi-size 128 128 128 \
-  --wandb-mode "${WANDB_MODE_CLEAN}" \
-  --run-name "dynunet-brats-${SLURM_JOB_ID:-local}" \
-  --data-dir /cluster/home/eldarja/CancerVision/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData
-
+  "${TRAIN_ARGS[@]}"

@@ -3,9 +3,17 @@
 
 from __future__ import annotations
 
+import argparse
+import os
+import subprocess
 import sys
+import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
+
+import torch
+import torch.distributed as dist
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -13,8 +21,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.models import dynnet  # noqa: E402
 
-
-from datasets import ConvertToMultiChannelBasedOnBratsClassesd  # noqa: E402
+from src.datasets import ConvertToMultiChannelBasedOnBratsClassesd  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Load config from .env if available
@@ -219,45 +226,11 @@ def find_nifti(directory: str, pattern: str) -> str:
 
 
 def build_data_dicts(data_dir: str):
-    """Scan BraTS2020 patient folders and return a list of data dicts.
+    """Scan BraTS 2020/2023/2024 patient folders and return data dicts.
 
     Each dict has keys: "image" (list of 4 modality paths) and "label" (seg path).
     """
-    data_dicts = []
-    if not os.path.isdir(data_dir):
-        raise FileNotFoundError(f"Data directory does not exist: {data_dir}")
-
-    patient_dirs = sorted(
-        d
-        for d in os.listdir(data_dir)
-        if os.path.isdir(os.path.join(data_dir, d)) and d.startswith("BraTS20_Training_")
-    )
-
-    for patient_name in patient_dirs:
-        patient_path = os.path.join(data_dir, patient_name)
-        try:
-            flair = find_nifti(patient_path, f"{patient_name}_flair")
-            t1 = find_nifti(patient_path, f"{patient_name}_t1")
-            t1ce = find_nifti(patient_path, f"{patient_name}_t1ce")
-            t2 = find_nifti(patient_path, f"{patient_name}_t2")
-            seg = find_nifti(patient_path, f"{patient_name}_seg")
-        except FileNotFoundError as exc:
-            print(f"WARNING: skipping {patient_name} -- {exc}")
-            continue
-
-        data_dicts.append(
-            {
-                "image": [flair, t1, t1ce, t2],
-                "label": seg,
-            }
-        )
-
-    if len(data_dicts) == 0:
-        raise FileNotFoundError(
-            f"No valid BraTS patient folders found in {data_dir}"
-        )
-
-    return data_dicts
+    return dynnet.build_data_dicts(data_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -267,25 +240,13 @@ def parse_args():
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     parser = argparse.ArgumentParser(
-        description="Train 3D U-Net on BraTS2020 NIfTI volumes"
+        description="Train 3D U-Net on BraTS 2020/2023/2024 NIfTI volumes"
     )
     parser.add_argument(
         "--data-dir",
         type=str,
-        default=os.path.normpath(
-            os.path.join(
-                script_dir,
-                "..",
-                "..",
-                "res",
-                "data",
-                "dataset",
-                # "archive",
-                "BraTS2020_TrainingData",
-                "MICCAI_BraTS2020_TrainingData",
-            )
-        ),
-        help="Path to MICCAI_BraTS2020_TrainingData folder containing patient dirs",
+        default=os.path.normpath(str(dynnet.DEFAULT_DATA_DIR)),
+        help="Path to BraTS 2020/2023/2024 root containing patient dirs",
     )
     parser.add_argument(
         "--save-dir",

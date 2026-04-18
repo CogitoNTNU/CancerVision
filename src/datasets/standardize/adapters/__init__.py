@@ -1,5 +1,6 @@
 """Dataset adapters for standardization."""
 
+from .brats import BraTSAdapter, BraTSDatasetSpec
 from .cfb_gbm import CfbGbmAdapter, parse_cfb_series_path
 from .brain_structure import BrainStructureAdapter, map_brain_structure_diagnosis
 from .remind import (
@@ -25,6 +26,8 @@ from .yale_brain_mets_longitudinal import (
 )
 
 __all__ = [
+    "BraTSAdapter",
+    "BraTSDatasetSpec",
     "CfbGbmAdapter",
     "BrainStructureAdapter",
     "RemindAdapter",

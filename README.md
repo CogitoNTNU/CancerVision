@@ -94,7 +94,7 @@ Local CancerVision training from repo root:
 ```bash
 uv run python -m src.models.dynnet \
   --dataset-source cancervision_binary_seg \
-  --task-manifest res/dataset/cancervision-standardization/task_manifests/segmentation_binary_curated.csv
+  --task-manifest res/dataset/cancervision-standardized/task_manifests/segmentation_binary_curated.csv
 ```
 
 Canonical SLURM launch:

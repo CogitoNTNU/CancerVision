@@ -9,6 +9,7 @@ from unittest import mock
 import torch
 
 from src.models.dynnet import (
+    DEFAULT_CANCERVISION_TASK_MANIFEST,
     DEFAULT_GPU_PROFILE_NAME,
     GPU_PROFILE_CONFIGS,
     GpuProfileConfig,
@@ -76,6 +77,7 @@ class DynnetSmokeTests(unittest.TestCase):
         self.assertIsNone(args.num_samples)
         self.assertEqual(args.gpu_profile, "auto")
         self.assertEqual(args.dataset_source, "brats")
+        self.assertIn("cancervision-standardized", str(DEFAULT_CANCERVISION_TASK_MANIFEST))
 
     def test_build_micro_batch_slices_splits_effective_batch(self) -> None:
         slices = build_micro_batch_slices(total_batch_size=4, requested_micro_batch_size=1)

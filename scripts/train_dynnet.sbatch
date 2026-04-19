@@ -7,7 +7,7 @@
 #   sbatch --account=<account> --constraint=gpu80g scripts/train_dynnet.sbatch
 
 #SBATCH --partition=GPUQ
-#SBATCH --account=<account>
+#SBATCH --account=studiegrupper-cogito
 #SBATCH --job-name="dynnet"
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -61,7 +61,7 @@ VAL_INTERVAL="${VAL_INTERVAL:-1}"
 LR="${LR:-1e-4}"
 WEIGHT_DECAY="${WEIGHT_DECAY:-1e-5}"
 RUN_NAME="${RUN_NAME:-dynnet-${DATASET_SOURCE}-${SLURM_JOB_ID:-local}}"
-TASK_MANIFEST="${TASK_MANIFEST:-${WORKDIR}/res/dataset/cancervision-standardization/task_manifests/segmentation_binary_curated.csv}"
+TASK_MANIFEST="${TASK_MANIFEST:-${WORKDIR}/res/dataset/cancervision-standardized/task_manifests/segmentation_binary_curated.csv}"
 DATA_DIR="${DATA_DIR:-${WORKDIR}/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData}"
 ROI_SIZE="${ROI_SIZE:-}"
 MODEL_FILTERS="${MODEL_FILTERS:-}"

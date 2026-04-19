@@ -19,7 +19,7 @@ load_dotenv()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_DIR = default_brats_data_dir(REPO_ROOT)
 DEFAULT_CANCERVISION_DATASET_ROOT = (
-    REPO_ROOT / "res" / "dataset" / "cancervision-standardization"
+    REPO_ROOT / "res" / "dataset" / "cancervision-standardized"
 )
 DEFAULT_CANCERVISION_TASK_MANIFEST = (
     DEFAULT_CANCERVISION_DATASET_ROOT

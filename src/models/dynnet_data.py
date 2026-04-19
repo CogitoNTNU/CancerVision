@@ -32,9 +32,14 @@ from src.datasets import (
     build_brats_data_dicts,
 )
 from src.datasets.standardize.pathing import resolve_existing_path
-from src.models.dynnet_config import DatasetConfig
+from src.models.dynnet_config import (
+    DEFAULT_CANCERVISION_DATASET_ROOT,
+    DatasetConfig,
+)
 
 WINDOWS_DRIVE_PATTERN = re.compile(r"^[a-zA-Z]:[\\/]")
+DEFAULT_CANCERVISION_WINDOWS_ROOT = r"Z:\dataset\cancervision-standardized"
+DEFAULT_MATERIALIZED_SEGMENTATION_MANIFEST_NAME = "segmentation_materialized_manifest.csv"
 
 
 def build_data_dicts(data_dir: str) -> list[dict[str, list[str] | str]]:
@@ -62,6 +67,65 @@ def _read_csv_rows(path: str | Path) -> list[dict[str, str]]:
 
 def _looks_like_windows_drive_path(path_text: str) -> bool:
     return bool(WINDOWS_DRIVE_PATTERN.match(path_text))
+
+
+def _has_usable_segmentation_rows(rows: Sequence[dict[str, str]]) -> bool:
+    allowed_splits = {"train", "val", "test"}
+    for row in rows:
+        if row.get("exclude_reason"):
+            continue
+        if not row.get("image_path") or not row.get("mask_path"):
+            continue
+        split_name = (row.get("task_split") or "").strip().lower()
+        if split_name in allowed_splits:
+            return True
+    return False
+
+
+def infer_cancervision_path_prefix_maps(
+    path_prefix_maps: Sequence[str] | None = None,
+) -> list[str]:
+    if path_prefix_maps:
+        return list(path_prefix_maps)
+
+    dataset_root = DEFAULT_CANCERVISION_DATASET_ROOT.resolve()
+    if dataset_root.is_dir():
+        return [f"{DEFAULT_CANCERVISION_WINDOWS_ROOT}={dataset_root}"]
+    return []
+
+
+def resolve_cancervision_task_manifest_path(
+    task_manifest_path: str | Path,
+    *,
+    warn_on_fallback: bool = True,
+) -> Path:
+    manifest_path = Path(task_manifest_path)
+    rows = _read_csv_rows(manifest_path)
+    if _has_usable_segmentation_rows(rows):
+        return manifest_path
+
+    candidate = (
+        manifest_path.parents[1]
+        / "segmentation_native"
+        / DEFAULT_MATERIALIZED_SEGMENTATION_MANIFEST_NAME
+        if manifest_path.parent.name == "task_manifests" and len(manifest_path.parents) >= 2
+        else manifest_path.parent / DEFAULT_MATERIALIZED_SEGMENTATION_MANIFEST_NAME
+    )
+    if candidate == manifest_path or not candidate.is_file():
+        return manifest_path
+
+    candidate_rows = _read_csv_rows(candidate)
+    if not _has_usable_segmentation_rows(candidate_rows):
+        return manifest_path
+
+    if warn_on_fallback:
+        warnings.warn(
+            "CancerVision task manifest "
+            f"{manifest_path} has no usable segmentation rows; "
+            f"falling back to materialized manifest {candidate}.",
+            stacklevel=2,
+        )
+    return candidate
 
 
 def parse_path_prefix_map(mapping_text: str) -> tuple[str, str]:
@@ -137,9 +201,10 @@ def build_cancervision_segmentation_splits(
     task_manifest_path: str | Path,
     path_prefix_maps: Sequence[str] | None = None,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
-    manifest_path = Path(task_manifest_path)
+    manifest_path = resolve_cancervision_task_manifest_path(task_manifest_path)
     rows = _read_csv_rows(manifest_path)
     manifest_dir = manifest_path.parent
+    path_prefix_maps = infer_cancervision_path_prefix_maps(path_prefix_maps)
     allowed_splits = {"train", "val", "test"}
     seen_case_ids: set[str] = set()
     split_rows = {split: [] for split in allowed_splits}

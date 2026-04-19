@@ -27,7 +27,12 @@ from src.models.dynnet_config import (
     parse_args,
     validate_args,
 )
-from src.models.dynnet_data import build_dataset_splits, get_dataset_config
+from src.models.dynnet_data import (
+    build_dataset_splits,
+    get_dataset_config,
+    infer_cancervision_path_prefix_maps,
+    resolve_cancervision_task_manifest_path,
+)
 from src.models.dynnet_runtime import (
     RuntimeContext,
     apply_gpu_profile_defaults,
@@ -324,9 +329,22 @@ def main(argv: Sequence[str] | None = None) -> None:
             rank0_print(context, f"Data directory : {data_dir}")
             rank0_print(context, f"Exists         : {os.path.isdir(data_dir)}")
         else:
-            task_manifest = os.path.normpath(args.task_manifest)
+            requested_task_manifest = os.path.normpath(args.task_manifest)
+            task_manifest = os.path.normpath(
+                str(
+                    resolve_cancervision_task_manifest_path(
+                        args.task_manifest,
+                        warn_on_fallback=False,
+                    )
+                )
+            )
+            path_prefix_maps = infer_cancervision_path_prefix_maps(args.path_prefix_map)
             rank0_print(context, f"Task manifest  : {task_manifest}")
             rank0_print(context, f"Exists         : {os.path.isfile(task_manifest)}")
+            if task_manifest != requested_task_manifest:
+                rank0_print(context, f"Requested task : {requested_task_manifest}")
+            if path_prefix_maps:
+                rank0_print(context, f"Path remaps    : {path_prefix_maps}")
         rank0_print(context, f"Train micro-batch size: {args.train_micro_batch_size}")
         rank0_print(context, f"Validation sw_batch_size: {args.val_sw_batch_size}")
         rank0_print(context, f"ROI size       : {tuple(args.roi_size)}")

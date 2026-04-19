@@ -10,6 +10,7 @@ import nibabel as nib
 import numpy as np
 import torch
 
+import src.models.dynnet_data as dynnet_data_module
 from src.models.dynnet import (
     DEFAULT_CANCERVISION_TASK_MANIFEST,
     DEFAULT_GPU_PROFILE_NAME,
@@ -29,6 +30,7 @@ from src.models.dynnet import (
     load_resume_state,
     parse_args,
     parse_path_prefix_map,
+    resolve_cancervision_task_manifest_path,
     resolve_gpu_profile,
     save_last_checkpoint,
     setup_device_and_distributed,
@@ -312,6 +314,94 @@ class DynnetSmokeTests(unittest.TestCase):
                 ]
             )
             train_rows, val_rows, test_rows = build_dataset_splits(args)
+
+            self.assertEqual(
+                train_rows,
+                [{"image": os.path.normpath(str(image1)), "label": os.path.normpath(str(mask1))}],
+            )
+            self.assertEqual(
+                val_rows,
+                [{"image": os.path.normpath(str(image2)), "label": os.path.normpath(str(mask2))}],
+            )
+            self.assertEqual(test_rows, [])
+
+    def test_resolve_cancervision_task_manifest_path_falls_back_to_materialized_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "task_manifests"
+            seg_native_dir = root / "segmentation_native"
+            task_dir.mkdir(parents=True, exist_ok=True)
+            seg_native_dir.mkdir(parents=True, exist_ok=True)
+
+            curated_manifest = task_dir / "segmentation_binary_curated.csv"
+            curated_manifest.write_text(
+                "task_name,task_split,global_case_id,image_path,mask_path,exclude_reason\n",
+                encoding="utf-8",
+            )
+            materialized_manifest = seg_native_dir / "segmentation_materialized_manifest.csv"
+            materialized_manifest.write_text(
+                "\n".join(
+                    [
+                        "task_name,task_split,global_case_id,image_path,mask_path,exclude_reason",
+                        "segmentation_binary_curated,train,case-1,image1.nii.gz,mask1.nii.gz,",
+                        "segmentation_binary_curated,val,case-2,image2.nii.gz,mask2.nii.gz,",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertWarnsRegex(UserWarning, "falling back to materialized manifest"):
+                resolved = resolve_cancervision_task_manifest_path(curated_manifest)
+
+            self.assertEqual(resolved, materialized_manifest)
+
+    def test_build_dataset_splits_falls_back_to_materialized_manifest_and_default_path_remap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "task_manifests"
+            seg_native_dir = root / "segmentation_native"
+            task_dir.mkdir(parents=True, exist_ok=True)
+            seg_native_dir.mkdir(parents=True, exist_ok=True)
+
+            image1 = self._touch(seg_native_dir / "case-1" / "image.nii.gz")
+            mask1 = self._touch(seg_native_dir / "case-1" / "mask.nii.gz")
+            image2 = self._touch(seg_native_dir / "case-2" / "image.nii.gz")
+            mask2 = self._touch(seg_native_dir / "case-2" / "mask.nii.gz")
+
+            curated_manifest = task_dir / "segmentation_binary_curated.csv"
+            curated_manifest.write_text(
+                "task_name,task_split,global_case_id,image_path,mask_path,exclude_reason\n",
+                encoding="utf-8",
+            )
+            materialized_manifest = seg_native_dir / "segmentation_materialized_manifest.csv"
+            materialized_manifest.write_text(
+                "\n".join(
+                    [
+                        "task_name,task_split,global_case_id,image_path,mask_path,exclude_reason",
+                        r"segmentation_binary_curated,train,case-1,Z:\dataset\cancervision-standardized\segmentation_native\case-1\image.nii.gz,Z:\dataset\cancervision-standardized\segmentation_native\case-1\mask.nii.gz,",
+                        r"segmentation_binary_curated,val,case-2,Z:\dataset\cancervision-standardized\segmentation_native\case-2\image.nii.gz,Z:\dataset\cancervision-standardized\segmentation_native\case-2\mask.nii.gz,",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            args = parse_args(
+                [
+                    "--dataset-source",
+                    "cancervision_binary_seg",
+                    "--task-manifest",
+                    str(curated_manifest),
+                ]
+            )
+            with mock.patch.object(
+                dynnet_data_module,
+                "DEFAULT_CANCERVISION_DATASET_ROOT",
+                root,
+            ):
+                with self.assertWarnsRegex(
+                    UserWarning, "falling back to materialized manifest"
+                ):
+                    train_rows, val_rows, test_rows = build_dataset_splits(args)
 
             self.assertEqual(
                 train_rows,

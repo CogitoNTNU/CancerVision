@@ -89,13 +89,23 @@ For example: OS version, programs, libraries, etc.
 
 ## Usage
 
-To run the project, run the following command from the root directory of the project:
+Local CancerVision training from repo root:
 
 ```bash
-
+uv run python -m src.models.dynnet \
+  --dataset-source cancervision_binary_seg \
+  --task-manifest res/dataset/cancervision-standardization/task_manifests/segmentation_binary_curated.csv
 ```
 
-<!-- TODO: Instructions on how to run the project and use its features. -->
+Canonical SLURM launch:
+
+```bash
+sbatch --account=<account> --constraint=gpu40g scripts/train_dynnet.sbatch
+# or
+sbatch --account=<account> --constraint=gpu80g scripts/train_dynnet.sbatch
+```
+
+Trainer now uses one batch script and auto-detects GPU profile from Slurm constraints. Old split scripts like `clean_slurm*.slurm` and `run_slurm.slurm` are removed. To run raw BraTS folders instead of CancerVision manifests, submit with `DATASET_SOURCE=brats` and `DATA_DIR=/path/to/brats/root`.
 
 ### Generate Documentation Site
 

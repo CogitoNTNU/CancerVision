@@ -17,11 +17,15 @@ from src.models.dynnet import (
     build_dataset_splits,
     build_micro_batch_slices,
     build_model,
+    detect_gpu_profile_from_device,
     detect_gpu_profile_from_constraints,
     detect_requested_world_size,
     get_dataset_config,
+    is_cuda_oom_error,
+    load_resume_state,
     parse_args,
     resolve_gpu_profile,
+    save_last_checkpoint,
     setup_device_and_distributed,
 )
 
@@ -176,6 +180,62 @@ class DynnetSmokeTests(unittest.TestCase):
             self.assertEqual(val_rows, [{"image": os.path.normpath(str(image2)), "label": os.path.normpath(str(mask2))}])
             self.assertEqual(test_rows, [])
 
+    def test_build_dataset_splits_rejects_missing_train_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._touch(root / "image1.nii.gz")
+            self._touch(root / "mask1.nii.gz")
+            manifest = root / "segmentation_binary_curated.csv"
+            manifest.write_text(
+                "\n".join(
+                    [
+                        "task_name,task_split,global_case_id,image_path,mask_path,exclude_reason",
+                        "segmentation_binary_curated,val,case-1,image1.nii.gz,mask1.nii.gz,",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            args = parse_args(
+                [
+                    "--dataset-source",
+                    "cancervision_binary_seg",
+                    "--task-manifest",
+                    str(manifest),
+                ]
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "No train rows found"):
+                build_dataset_splits(args)
+
+    def test_build_dataset_splits_rejects_missing_val_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._touch(root / "image1.nii.gz")
+            self._touch(root / "mask1.nii.gz")
+            manifest = root / "segmentation_binary_curated.csv"
+            manifest.write_text(
+                "\n".join(
+                    [
+                        "task_name,task_split,global_case_id,image_path,mask_path,exclude_reason",
+                        "segmentation_binary_curated,train,case-1,image1.nii.gz,mask1.nii.gz,",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            args = parse_args(
+                [
+                    "--dataset-source",
+                    "cancervision_binary_seg",
+                    "--task-manifest",
+                    str(manifest),
+                ]
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "No val rows found"):
+                build_dataset_splits(args)
+
 
 class SingleGpuLaunchTests(unittest.TestCase):
     def _cpu_context(self) -> object:
@@ -207,6 +267,28 @@ class SingleGpuLaunchTests(unittest.TestCase):
             detect_gpu_profile_from_constraints({"SLURM_JOB_CONSTRAINTS": "v100"}),
             "gpu32g",
         )
+
+    def test_detect_gpu_profile_from_device_prefers_free_memory_over_total_memory(self) -> None:
+        context = type("FakeContext", (), {"device": torch.device("cuda:0")})()
+        fake_properties = type(
+            "FakeCudaProperties",
+            (),
+            {"total_memory": 80 * 1024**3},
+        )()
+
+        with mock.patch(
+            "src.models.dynnet_runtime.torch.cuda.get_device_properties",
+            return_value=fake_properties,
+        ), mock.patch(
+            "src.models.dynnet_runtime.torch.cuda.mem_get_info",
+            return_value=(30 * 1024**3, 80 * 1024**3),
+        ):
+            self.assertEqual(detect_gpu_profile_from_device(context), "gpu32g")
+
+    def test_is_cuda_oom_error_matches_runtime_error_text(self) -> None:
+        exc = RuntimeError("CUDA error: out of memory")
+
+        self.assertTrue(is_cuda_oom_error(exc))
 
     def test_resolve_gpu_profile_uses_default_when_no_constraints_or_cuda(self) -> None:
         profile = resolve_gpu_profile("auto", self._cpu_context(), {})
@@ -262,6 +344,43 @@ class SingleGpuLaunchTests(unittest.TestCase):
         self.assertEqual(args.num_samples, 3)
         self.assertEqual(tuple(args.model_filters), (8, 16, 32, 64, 96))
         self.assertEqual(args.val_sw_batch_size, 2)
+
+    def test_save_and_load_resume_state_round_trip(self) -> None:
+        model = build_model()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=5)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_dir = Path(tmpdir)
+            save_last_checkpoint(
+                run_dir=run_dir,
+                model=model,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                scaler=None,
+                epoch=3,
+                best_metric=0.75,
+                best_metric_epoch=2,
+            )
+
+            restored_model = build_model()
+            restored_optimizer = torch.optim.Adam(restored_model.parameters(), lr=1e-4)
+            restored_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                restored_optimizer,
+                T_max=5,
+            )
+            start_epoch, best_metric, best_metric_epoch = load_resume_state(
+                model=restored_model,
+                optimizer=restored_optimizer,
+                scheduler=restored_scheduler,
+                scaler=None,
+                resume_path=str(run_dir / "last_checkpoint.pt"),
+                context=self._cpu_context(),
+            )
+
+            self.assertEqual(start_epoch, 4)
+            self.assertEqual(best_metric, 0.75)
+            self.assertEqual(best_metric_epoch, 2)
 
 
 if __name__ == "__main__":

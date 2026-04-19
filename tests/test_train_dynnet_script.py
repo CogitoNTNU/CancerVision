@@ -1,5 +1,6 @@
 import subprocess
 import unittest
+from pathlib import Path
 
 
 class TrainDynnetScriptTests(unittest.TestCase):
@@ -12,3 +13,9 @@ class TrainDynnetScriptTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_batch_script_runs_dynnet_through_uv(self) -> None:
+        script = Path("scripts/train_dynnet.sbatch").read_text(encoding="utf-8")
+
+        self.assertIn("command -v uv", script)
+        self.assertIn("uv run --no-sync python -m src.models.dynnet", script)

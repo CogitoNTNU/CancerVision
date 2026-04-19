@@ -36,6 +36,11 @@ if [ ! -x "${WORKDIR}/.venv/bin/python" ]; then
   exit 1
 fi
 
+if ! command -v uv >/dev/null 2>&1; then
+  echo "Missing uv on PATH. Install uv or load the module before submitting this job."
+  exit 1
+fi
+
 if [ -f "${WORKDIR}/.env" ]; then
   set -a
   # shellcheck disable=SC1091
@@ -68,7 +73,7 @@ MODEL_FILTERS="${MODEL_FILTERS:-}"
 RESUME="${RESUME:-}"
 PATH_PREFIX_MAP="${PATH_PREFIX_MAP:-}"
 
-echo "Python: ${WORKDIR}/.venv/bin/python"
+echo "Python runner: uv run --no-sync python"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
 echo "GPU profile: ${GPU_PROFILE}"
 echo "Dataset source: ${DATASET_SOURCE}"
@@ -119,5 +124,5 @@ if [ -n "${PATH_PREFIX_MAP}" ]; then
 fi
 
 srun --ntasks=1 --gpus-per-task=1 \
-  "${WORKDIR}/.venv/bin/python" -m src.models.dynnet \
+  uv run --no-sync python -m src.models.dynnet \
   "${TRAIN_ARGS[@]}"

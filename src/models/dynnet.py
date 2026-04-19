@@ -24,6 +24,7 @@ from src.models.dynnet_config import (
     validate_args,
 )
 from src.models.dynnet_data import (
+    apply_path_prefix_maps,
     build_cancervision_segmentation_splits,
     build_data_dicts,
     build_dataset_splits,
@@ -32,6 +33,7 @@ from src.models.dynnet_data import (
     get_cancervision_binary_seg_train_transforms,
     get_cancervision_binary_seg_val_transforms,
     get_dataset_config,
+    parse_path_prefix_map,
 )
 from src.models.dynnet_runtime import (
     RuntimeContext,
@@ -88,6 +90,7 @@ __all__ = [
     "WANDB_ENTITY",
     "WANDB_PROJECT",
     "apply_gpu_profile_defaults",
+    "apply_path_prefix_maps",
     "bootstrap_distributed_env",
     "build_cancervision_segmentation_splits",
     "build_data_dicts",
@@ -116,6 +119,7 @@ __all__ = [
     "maybe_init_wandb",
     "normalize_gpu_profile_name",
     "parse_args",
+    "parse_path_prefix_map",
     "rank0_print",
     "reduce_mean",
     "resolve_cuda_device_index",

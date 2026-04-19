@@ -107,6 +107,15 @@ sbatch --account=<account> --constraint=gpu80g scripts/train_dynnet.sbatch
 
 Trainer now uses one batch script and auto-detects GPU profile from Slurm constraints. Old split scripts like `clean_slurm*.slurm` and `run_slurm.slurm` are removed. To run raw BraTS folders instead of CancerVision manifests, submit with `DATASET_SOURCE=brats` and `DATA_DIR=/path/to/brats/root`.
 
+If one manifest must work across local and cluster path layouts, remap prefixes at runtime:
+
+```bash
+uv run python -m src.models.dynnet \
+  --dataset-source cancervision_binary_seg \
+  --task-manifest res/dataset/cancervision-standardized/task_manifests/segmentation_binary_broad.csv \
+  --path-prefix-map 'Z:\dataset\cancervision-standardized=/cluster/home/eldarja/CancerVision/res/dataset/cancervision-standardized'
+```
+
 ### Generate Documentation Site
 
 To build and preview the documentation site locally:

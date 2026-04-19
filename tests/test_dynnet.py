@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import nibabel as nib
+import numpy as np
 import torch
 
 from src.models.dynnet import (
@@ -14,6 +16,7 @@ from src.models.dynnet import (
     GPU_PROFILE_CONFIGS,
     GpuProfileConfig,
     apply_gpu_profile_defaults,
+    apply_path_prefix_maps,
     build_cancervision_segmentation_splits,
     build_dataset_splits,
     build_micro_batch_slices,
@@ -25,9 +28,11 @@ from src.models.dynnet import (
     is_cuda_oom_error,
     load_resume_state,
     parse_args,
+    parse_path_prefix_map,
     resolve_gpu_profile,
     save_last_checkpoint,
     setup_device_and_distributed,
+    validate_args,
 )
 
 
@@ -35,6 +40,11 @@ class DynnetSmokeTests(unittest.TestCase):
     def _touch(self, path: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"")
+        return path
+
+    def _write_nifti(self, path: Path, shape: tuple[int, int, int]) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        nib.save(nib.Nifti1Image(np.zeros(shape, dtype=np.float32), affine=np.eye(4)), path)
         return path
 
     def test_build_model_smoke_forward(self) -> None:
@@ -78,6 +88,26 @@ class DynnetSmokeTests(unittest.TestCase):
         self.assertEqual(args.gpu_profile, "auto")
         self.assertEqual(args.dataset_source, "brats")
         self.assertIn("cancervision-standardized", str(DEFAULT_CANCERVISION_TASK_MANIFEST))
+        self.assertEqual(args.path_prefix_map, [])
+
+    def test_parse_path_prefix_map_requires_from_to_shape(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Expected FROM=TO"):
+            parse_path_prefix_map("bad-mapping")
+
+    def test_apply_path_prefix_maps_rewrites_matching_prefix(self) -> None:
+        remapped = apply_path_prefix_maps(
+            r"Z:\dataset\cancervision-standardized\segmentation_native\case\image.nii.gz",
+            [
+                r"Z:\dataset\cancervision-standardized=C:\Users\Polar\Documents\GitHub\CancerVision\res\dataset\cancervision-standardized"
+            ],
+        )
+
+        self.assertEqual(
+            remapped,
+            os.path.normpath(
+                r"C:\Users\Polar\Documents\GitHub\CancerVision\res\dataset\cancervision-standardized\segmentation_native\case\image.nii.gz"
+            ),
+        )
 
     def test_build_micro_batch_slices_splits_effective_batch(self) -> None:
         slices = build_micro_batch_slices(total_batch_size=4, requested_micro_batch_size=1)
@@ -127,6 +157,39 @@ class DynnetSmokeTests(unittest.TestCase):
             self.assertEqual(val_rows, [{"image": os.path.normpath(str(image2)), "label": os.path.normpath(str(mask2))}])
             self.assertEqual(test_rows, [{"image": os.path.normpath(str(image3)), "label": os.path.normpath(str(mask3))}])
 
+    def test_build_cancervision_segmentation_splits_ignores_extra_csv_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image1 = self._touch(root / "image1.nii.gz")
+            mask1 = self._touch(root / "mask1.nii.gz")
+            image2 = self._touch(root / "image2.nii.gz")
+            mask2 = self._touch(root / "mask2.nii.gz")
+            manifest = root / "segmentation_binary_curated.csv"
+            manifest.write_text(
+                "\n".join(
+                    [
+                        "task_name,task_split,global_case_id,image_path,mask_path,exclude_reason",
+                        "segmentation_binary_curated,train,case-1,image1.nii.gz,mask1.nii.gz,,extra-field",
+                        "segmentation_binary_curated,val,case-2,image2.nii.gz,mask2.nii.gz,",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            train_rows, val_rows, test_rows = build_cancervision_segmentation_splits(
+                manifest
+            )
+
+            self.assertEqual(
+                train_rows,
+                [{"image": os.path.normpath(str(image1)), "label": os.path.normpath(str(mask1))}],
+            )
+            self.assertEqual(
+                val_rows,
+                [{"image": os.path.normpath(str(image2)), "label": os.path.normpath(str(mask2))}],
+            )
+            self.assertEqual(test_rows, [])
+
     def test_build_cancervision_segmentation_splits_rejects_duplicate_case_ids(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -148,6 +211,43 @@ class DynnetSmokeTests(unittest.TestCase):
 
             with self.assertRaisesRegex(RuntimeError, "Duplicate case 'dup-case'"):
                 build_cancervision_segmentation_splits(manifest)
+
+    def test_build_cancervision_segmentation_splits_skips_shape_mismatches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            good_image = self._write_nifti(root / "good_image.nii.gz", (32, 32, 16))
+            good_mask = self._write_nifti(root / "good_mask.nii.gz", (32, 32, 16))
+            bad_image = self._write_nifti(root / "bad_image.nii.gz", (32, 32, 16))
+            bad_mask = self._write_nifti(root / "bad_mask.nii.gz", (16, 16, 16))
+            val_image = self._write_nifti(root / "val_image.nii.gz", (32, 32, 16))
+            val_mask = self._write_nifti(root / "val_mask.nii.gz", (32, 32, 16))
+            manifest = root / "segmentation_binary_curated.csv"
+            manifest.write_text(
+                "\n".join(
+                    [
+                        "task_name,task_split,global_case_id,dataset_key,image_path,mask_path,exclude_reason",
+                        "segmentation_binary_curated,train,good-case,brats2020,good_image.nii.gz,good_mask.nii.gz,",
+                        "segmentation_binary_curated,train,bad-case,utsw_glioma,bad_image.nii.gz,bad_mask.nii.gz,",
+                        "segmentation_binary_curated,val,val-case,brats2020,val_image.nii.gz,val_mask.nii.gz,",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertWarnsRegex(UserWarning, "shape mismatches"):
+                train_rows, val_rows, test_rows = build_cancervision_segmentation_splits(
+                    manifest
+                )
+
+            self.assertEqual(
+                train_rows,
+                [{"image": os.path.normpath(str(good_image)), "label": os.path.normpath(str(good_mask))}],
+            )
+            self.assertEqual(
+                val_rows,
+                [{"image": os.path.normpath(str(val_image)), "label": os.path.normpath(str(val_mask))}],
+            )
+            self.assertEqual(test_rows, [])
 
     def test_build_dataset_splits_uses_cancervision_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -180,6 +280,47 @@ class DynnetSmokeTests(unittest.TestCase):
 
             self.assertEqual(train_rows, [{"image": os.path.normpath(str(image1)), "label": os.path.normpath(str(mask1))}])
             self.assertEqual(val_rows, [{"image": os.path.normpath(str(image2)), "label": os.path.normpath(str(mask2))}])
+            self.assertEqual(test_rows, [])
+
+    def test_build_dataset_splits_applies_path_prefix_maps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image1 = self._touch(root / "segmentation_native" / "case-1" / "image.nii.gz")
+            mask1 = self._touch(root / "segmentation_native" / "case-1" / "mask.nii.gz")
+            image2 = self._touch(root / "segmentation_native" / "case-2" / "image.nii.gz")
+            mask2 = self._touch(root / "segmentation_native" / "case-2" / "mask.nii.gz")
+            manifest = root / "segmentation_binary_curated.csv"
+            manifest.write_text(
+                "\n".join(
+                    [
+                        "task_name,task_split,global_case_id,image_path,mask_path,exclude_reason",
+                        r"segmentation_binary_curated,train,case-1,Z:\dataset\cancervision-standardized\segmentation_native\case-1\image.nii.gz,Z:\dataset\cancervision-standardized\segmentation_native\case-1\mask.nii.gz,",
+                        r"segmentation_binary_curated,val,case-2,Z:\dataset\cancervision-standardized\segmentation_native\case-2\image.nii.gz,Z:\dataset\cancervision-standardized\segmentation_native\case-2\mask.nii.gz,",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            args = parse_args(
+                [
+                    "--dataset-source",
+                    "cancervision_binary_seg",
+                    "--task-manifest",
+                    str(manifest),
+                    "--path-prefix-map",
+                    rf"Z:\dataset\cancervision-standardized={root}",
+                ]
+            )
+            train_rows, val_rows, test_rows = build_dataset_splits(args)
+
+            self.assertEqual(
+                train_rows,
+                [{"image": os.path.normpath(str(image1)), "label": os.path.normpath(str(mask1))}],
+            )
+            self.assertEqual(
+                val_rows,
+                [{"image": os.path.normpath(str(image2)), "label": os.path.normpath(str(mask2))}],
+            )
             self.assertEqual(test_rows, [])
 
     def test_build_dataset_splits_rejects_missing_train_rows(self) -> None:
@@ -346,6 +487,28 @@ class SingleGpuLaunchTests(unittest.TestCase):
         self.assertEqual(args.num_samples, 3)
         self.assertEqual(tuple(args.model_filters), (8, 16, 32, 64, 96))
         self.assertEqual(args.val_sw_batch_size, 2)
+
+    def test_validate_args_allows_thin_z_roi_for_segmentation_cases(self) -> None:
+        args = parse_args(
+            [
+                "--roi-size",
+                "48",
+                "48",
+                "16",
+                "--num-samples",
+                "1",
+                "--model-filters",
+                "8",
+                "16",
+                "32",
+                "64",
+                "96",
+                "--val-sw-batch-size",
+                "1",
+            ]
+        )
+
+        validate_args(args)
 
     def test_save_and_load_resume_state_round_trip(self) -> None:
         model = build_model()

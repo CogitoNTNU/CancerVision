@@ -66,6 +66,7 @@ DATA_DIR="${DATA_DIR:-${WORKDIR}/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS
 ROI_SIZE="${ROI_SIZE:-}"
 MODEL_FILTERS="${MODEL_FILTERS:-}"
 RESUME="${RESUME:-}"
+PATH_PREFIX_MAP="${PATH_PREFIX_MAP:-}"
 
 echo "Python: ${WORKDIR}/.venv/bin/python"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
@@ -111,6 +112,10 @@ fi
 
 if [ -n "${RESUME}" ]; then
   TRAIN_ARGS+=(--resume "${RESUME}")
+fi
+
+if [ -n "${PATH_PREFIX_MAP}" ]; then
+  TRAIN_ARGS+=(--path-prefix-map "${PATH_PREFIX_MAP}")
 fi
 
 srun --ntasks=1 --gpus-per-task=1 \

@@ -6,9 +6,12 @@ import argparse
 import csv
 import os
 import re
+import warnings
+from collections import Counter
 from pathlib import Path
 from typing import Sequence
 
+import nibabel as nib
 from monai.transforms import (
     Compose,
     EnsureChannelFirstd,
@@ -18,6 +21,7 @@ from monai.transforms import (
     RandFlipd,
     RandScaleIntensityd,
     RandShiftIntensityd,
+    SpatialPadd,
 )
 from sklearn.model_selection import train_test_split
 
@@ -40,14 +44,55 @@ def build_data_dicts(data_dir: str) -> list[dict[str, list[str] | str]]:
 def _read_csv_rows(path: str | Path) -> list[dict[str, str]]:
     source = Path(path)
     with source.open(newline="", encoding="utf-8") as handle:
-        return [
-            {key: (value or "").strip() for key, value in row.items()}
-            for row in csv.DictReader(handle)
-        ]
+        normalized_rows: list[dict[str, str]] = []
+        for row in csv.DictReader(handle):
+            normalized_row: dict[str, str] = {}
+            for key, value in row.items():
+                if key is None:
+                    continue
+                if isinstance(value, list):
+                    normalized_row[key] = ",".join(
+                        str(item).strip() for item in value if item is not None
+                    )
+                else:
+                    normalized_row[key] = (value or "").strip()
+            normalized_rows.append(normalized_row)
+        return normalized_rows
 
 
 def _looks_like_windows_drive_path(path_text: str) -> bool:
     return bool(WINDOWS_DRIVE_PATTERN.match(path_text))
+
+
+def parse_path_prefix_map(mapping_text: str) -> tuple[str, str]:
+    if "=" not in mapping_text:
+        raise ValueError(
+            f"Invalid --path-prefix-map '{mapping_text}'. Expected FROM=TO."
+        )
+    source_prefix, target_prefix = mapping_text.split("=", 1)
+    source_prefix = source_prefix.strip()
+    target_prefix = target_prefix.strip()
+    if not source_prefix or not target_prefix:
+        raise ValueError(
+            f"Invalid --path-prefix-map '{mapping_text}'. Expected FROM=TO."
+        )
+    return source_prefix, target_prefix
+
+
+def apply_path_prefix_maps(
+    raw_path: str,
+    path_prefix_maps: Sequence[str] | None = None,
+) -> str:
+    if not raw_path:
+        return raw_path
+
+    for mapping_text in path_prefix_maps or []:
+        source_prefix, target_prefix = parse_path_prefix_map(mapping_text)
+        if raw_path.startswith(source_prefix):
+            suffix = raw_path[len(source_prefix) :].lstrip("\\/")
+            suffix_parts = [part for part in re.split(r"[\\/]+", suffix) if part]
+            return os.path.normpath(str(Path(target_prefix).joinpath(*suffix_parts)))
+    return raw_path
 
 
 def _resolve_manifest_data_path(
@@ -56,7 +101,9 @@ def _resolve_manifest_data_path(
     manifest_dir: Path,
     field_name: str,
     case_id: str,
+    path_prefix_maps: Sequence[str] | None = None,
 ) -> str:
+    raw_path = apply_path_prefix_maps(raw_path, path_prefix_maps)
     candidates: list[str | Path] = []
     if raw_path:
         if Path(raw_path).is_absolute() or _looks_like_windows_drive_path(raw_path):
@@ -77,8 +124,18 @@ def _resolve_manifest_data_path(
     )
 
 
+def _shapes_match_or_unknown(image_path: str, label_path: str) -> bool | None:
+    try:
+        image_shape = nib.load(image_path).shape
+        label_shape = nib.load(label_path).shape
+    except Exception:
+        return None
+    return image_shape == label_shape
+
+
 def build_cancervision_segmentation_splits(
     task_manifest_path: str | Path,
+    path_prefix_maps: Sequence[str] | None = None,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
     manifest_path = Path(task_manifest_path)
     rows = _read_csv_rows(manifest_path)
@@ -86,6 +143,7 @@ def build_cancervision_segmentation_splits(
     allowed_splits = {"train", "val", "test"}
     seen_case_ids: set[str] = set()
     split_rows = {split: [] for split in allowed_splits}
+    excluded_shape_mismatches: list[tuple[str, str]] = []
 
     for index, row in enumerate(rows, start=1):
         if row.get("exclude_reason"):
@@ -111,21 +169,40 @@ def build_cancervision_segmentation_splits(
             )
         seen_case_ids.add(case_id)
 
+        image_path = _resolve_manifest_data_path(
+            row["image_path"],
+            manifest_dir=manifest_dir,
+            field_name="image_path",
+            case_id=case_id,
+            path_prefix_maps=path_prefix_maps,
+        )
+        label_path = _resolve_manifest_data_path(
+            row["mask_path"],
+            manifest_dir=manifest_dir,
+            field_name="mask_path",
+            case_id=case_id,
+            path_prefix_maps=path_prefix_maps,
+        )
+        shapes_match = _shapes_match_or_unknown(image_path, label_path)
+        if shapes_match is False:
+            excluded_shape_mismatches.append((case_id, row.get("dataset_key", "")))
+            continue
+
         split_rows[split_name].append(
             {
-                "image": _resolve_manifest_data_path(
-                    row["image_path"],
-                    manifest_dir=manifest_dir,
-                    field_name="image_path",
-                    case_id=case_id,
-                ),
-                "label": _resolve_manifest_data_path(
-                    row["mask_path"],
-                    manifest_dir=manifest_dir,
-                    field_name="mask_path",
-                    case_id=case_id,
-                ),
+                "image": image_path,
+                "label": label_path,
             }
+        )
+
+    if excluded_shape_mismatches:
+        counts = Counter(dataset_key or "<unknown>" for _, dataset_key in excluded_shape_mismatches)
+        warnings.warn(
+            "Excluded "
+            f"{len(excluded_shape_mismatches)} CancerVision segmentation rows with "
+            f"image/mask shape mismatches from {manifest_path}. "
+            f"By dataset: {dict(sorted(counts.items()))}.",
+            stacklevel=2,
         )
 
     return split_rows["train"], split_rows["val"], split_rows["test"]
@@ -147,6 +224,7 @@ def get_brats_train_transforms(roi_size: Sequence[int], num_samples: int) -> Com
                 num_samples=num_samples,
                 image_key="image",
                 image_threshold=0,
+                allow_smaller=True,
             ),
             RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
             RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
@@ -179,6 +257,7 @@ def get_cancervision_binary_seg_train_transforms(
             BinarizeLabeld(keys="label"),
             EnsureFloatLabeld(keys="label"),
             NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
+            SpatialPadd(keys=["image", "label"], spatial_size=roi_size),
             RandCropByPosNegLabeld(
                 keys=["image", "label"],
                 label_key="label",
@@ -246,7 +325,8 @@ def build_dataset_splits(
     if args.dataset_source == "cancervision_binary_seg":
         task_manifest = os.path.normpath(args.task_manifest)
         train_dicts, val_dicts, test_dicts = build_cancervision_segmentation_splits(
-            task_manifest
+            task_manifest,
+            path_prefix_maps=args.path_prefix_map,
         )
         if not train_dicts:
             raise RuntimeError(

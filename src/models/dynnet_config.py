@@ -130,6 +130,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--path-prefix-map",
+        action="append",
+        default=[],
+        metavar="FROM=TO",
+        help=(
+            "Optional manifest path remap applied before file resolution. "
+            "Repeat for multiple mappings."
+        ),
+    )
+    parser.add_argument(
         "--save-dir",
         type=str,
         default=os.path.normpath(str(DEFAULT_SAVE_DIR)),
@@ -246,7 +256,7 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--val-sw-batch-size must be at least 1")
     if args.num_samples < 1:
         raise ValueError("--num-samples must be at least 1")
-    if len(args.roi_size) != 3 or any(size < 32 for size in args.roi_size):
-        raise ValueError("--roi-size must contain three integers >= 32")
+    if len(args.roi_size) != 3 or any(size < 16 for size in args.roi_size):
+        raise ValueError("--roi-size must contain three integers >= 16")
     if len(args.model_filters) != 5 or any(width < 8 for width in args.model_filters):
         raise ValueError("--model-filters must contain five integers >= 8")

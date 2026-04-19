@@ -21,6 +21,15 @@
 
 set -euo pipefail
 
+strip_cr() {
+  printf '%s' "${1//$'\r'/}"
+}
+
+sanitize_var() {
+  local var_name="$1"
+  printf -v "${var_name}" '%s' "$(strip_cr "${!var_name}")"
+}
+
 WORKDIR="${SLURM_SUBMIT_DIR:-$(pwd)}"
 cd "${WORKDIR}"
 mkdir -p slurm_outputs
@@ -72,6 +81,29 @@ ROI_SIZE="${ROI_SIZE:-}"
 MODEL_FILTERS="${MODEL_FILTERS:-}"
 RESUME="${RESUME:-}"
 PATH_PREFIX_MAP="${PATH_PREFIX_MAP:-}"
+
+for var_name in \
+  DATASET_SOURCE \
+  GPU_PROFILE \
+  WANDB_MODE \
+  MAX_EPOCHS \
+  BATCH_SIZE \
+  TRAIN_MICRO_BATCH_SIZE \
+  NUM_SAMPLES \
+  VAL_SW_BATCH_SIZE \
+  NUM_WORKERS \
+  VAL_INTERVAL \
+  LR \
+  WEIGHT_DECAY \
+  RUN_NAME \
+  TASK_MANIFEST \
+  DATA_DIR \
+  ROI_SIZE \
+  MODEL_FILTERS \
+  RESUME \
+  PATH_PREFIX_MAP; do
+  sanitize_var "${var_name}"
+done
 
 echo "Python runner: uv run --no-sync python"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"

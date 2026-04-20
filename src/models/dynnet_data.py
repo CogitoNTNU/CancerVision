@@ -273,7 +273,12 @@ def build_cancervision_segmentation_splits(
     return split_rows["train"], split_rows["val"], split_rows["test"]
 
 
-def get_brats_train_transforms(roi_size: Sequence[int], num_samples: int) -> Compose:
+def get_brats_train_transforms(
+    roi_size: Sequence[int],
+    num_samples: int,
+    crop_pos_weight: float,
+    crop_neg_weight: float,
+) -> Compose:
     return Compose(
         [
             LoadImaged(keys=["image", "label"]),
@@ -284,8 +289,8 @@ def get_brats_train_transforms(roi_size: Sequence[int], num_samples: int) -> Com
                 keys=["image", "label"],
                 label_key="label",
                 spatial_size=roi_size,
-                pos=1,
-                neg=1,
+                pos=crop_pos_weight,
+                neg=crop_neg_weight,
                 num_samples=num_samples,
                 image_key="image",
                 image_threshold=0,
@@ -314,6 +319,8 @@ def get_brats_val_transforms() -> Compose:
 def get_cancervision_binary_seg_train_transforms(
     roi_size: Sequence[int],
     num_samples: int,
+    crop_pos_weight: float,
+    crop_neg_weight: float,
 ) -> Compose:
     return Compose(
         [
@@ -327,8 +334,8 @@ def get_cancervision_binary_seg_train_transforms(
                 keys=["image", "label"],
                 label_key="label",
                 spatial_size=roi_size,
-                pos=1,
-                neg=1,
+                pos=crop_pos_weight,
+                neg=crop_neg_weight,
                 num_samples=num_samples,
                 image_key="image",
                 image_threshold=0,

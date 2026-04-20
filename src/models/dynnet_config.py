@@ -27,8 +27,8 @@ DEFAULT_CANCERVISION_TASK_MANIFEST = (
     / "segmentation_binary_curated.csv"
 )
 DEFAULT_SAVE_DIR = REPO_ROOT / "res" / "models"
-WANDB_PROJECT = "cancervision"
-WANDB_ENTITY = os.getenv("WANDB_ENTITY", "cancervision")
+WANDB_PROJECT = (os.getenv("WANDB_PROJECT", "cancervision") or "cancervision").strip()
+WANDB_ENTITY = (os.getenv("WANDB_ENTITY") or "").strip() or None
 DEFAULT_ROI_SIZE = (96, 96, 96)
 DEFAULT_NUM_SAMPLES = 1
 DEFAULT_VAL_SW_BATCH_SIZE = 1
@@ -40,7 +40,7 @@ class DatasetConfig:
     in_channels: int
     out_channels: int
     metric_names: tuple[str, ...]
-    train_transform_builder: Callable[[Sequence[int], int], Compose]
+    train_transform_builder: Callable[[Sequence[int], int, float, float], Compose]
     val_transform_builder: Callable[[], Compose]
 
 
@@ -187,6 +187,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Number of random crops per volume per iteration",
     )
     parser.add_argument(
+        "--crop-pos-weight",
+        type=float,
+        default=1.0,
+        help="Relative weight for foreground-centered random crops.",
+    )
+    parser.add_argument(
+        "--crop-neg-weight",
+        type=float,
+        default=1.0,
+        help="Relative weight for background-centered random crops.",
+    )
+    parser.add_argument(
         "--model-filters",
         type=int,
         nargs=5,
@@ -213,6 +225,43 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         help="Sliding-window batch size used during validation inference",
+    )
+    parser.add_argument(
+        "--loss",
+        choices=("dice", "dicece"),
+        default="dice",
+        help="Segmentation loss used for optimization.",
+    )
+    parser.add_argument(
+        "--dicece-lambda-dice",
+        type=float,
+        default=0.7,
+        help="Dice term weight when --loss=dicece.",
+    )
+    parser.add_argument(
+        "--dicece-lambda-ce",
+        type=float,
+        default=0.3,
+        help="Cross-entropy term weight when --loss=dicece.",
+    )
+    parser.add_argument(
+        "--val-thresholds",
+        type=float,
+        nargs="+",
+        default=None,
+        help="Optional sigmoid thresholds to sweep during validation.",
+    )
+    parser.add_argument(
+        "--min-epochs",
+        type=int,
+        default=0,
+        help="Minimum epochs before early stopping can trigger.",
+    )
+    parser.add_argument(
+        "--early-stop-patience",
+        type=int,
+        default=0,
+        help="Stop after this many validations without improvement; 0 disables early stopping.",
     )
     parser.add_argument(
         "--wandb-mode",
@@ -256,7 +305,28 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--val-sw-batch-size must be at least 1")
     if args.num_samples < 1:
         raise ValueError("--num-samples must be at least 1")
+    if args.crop_pos_weight <= 0:
+        raise ValueError("--crop-pos-weight must be greater than 0")
+    if args.crop_neg_weight <= 0:
+        raise ValueError("--crop-neg-weight must be greater than 0")
     if len(args.roi_size) != 3 or any(size < 16 for size in args.roi_size):
         raise ValueError("--roi-size must contain three integers >= 16")
     if len(args.model_filters) != 5 or any(width < 8 for width in args.model_filters):
         raise ValueError("--model-filters must contain five integers >= 8")
+    if args.dicece_lambda_dice < 0:
+        raise ValueError("--dicece-lambda-dice must be non-negative")
+    if args.dicece_lambda_ce < 0:
+        raise ValueError("--dicece-lambda-ce must be non-negative")
+    if args.loss == "dicece" and (args.dicece_lambda_dice + args.dicece_lambda_ce) <= 0:
+        raise ValueError("DiceCE loss requires a positive sum of lambda weights")
+    if args.val_thresholds is not None:
+        if not args.val_thresholds:
+            raise ValueError("--val-thresholds must include at least one value")
+        if any(threshold < 0 or threshold > 1 for threshold in args.val_thresholds):
+            raise ValueError("--val-thresholds values must be between 0 and 1")
+    if args.min_epochs < 0:
+        raise ValueError("--min-epochs must be non-negative")
+    if args.early_stop_patience < 0:
+        raise ValueError("--early-stop-patience must be non-negative")
+    if args.min_epochs > args.max_epochs:
+        raise ValueError("--min-epochs cannot exceed --max-epochs")

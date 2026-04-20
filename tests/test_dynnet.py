@@ -3,12 +3,15 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import argparse
 from pathlib import Path
 from unittest import mock
 
 import nibabel as nib
 import numpy as np
 import torch
+from monai.losses import DiceCELoss, DiceLoss
+from monai.transforms import RandCropByPosNegLabeld
 
 import src.models.dynnet_data as dynnet_data_module
 from src.models.dynnet import (
@@ -16,10 +19,12 @@ from src.models.dynnet import (
     DEFAULT_GPU_PROFILE_NAME,
     GPU_PROFILE_CONFIGS,
     GpuProfileConfig,
+    DEFAULT_VALIDATION_THRESHOLD,
     apply_gpu_profile_defaults,
     apply_path_prefix_maps,
     build_cancervision_segmentation_splits,
     build_dataset_splits,
+    build_loss_function,
     build_micro_batch_slices,
     build_model,
     detect_gpu_profile_from_device,
@@ -28,17 +33,31 @@ from src.models.dynnet import (
     get_dataset_config,
     is_cuda_oom_error,
     load_resume_state,
+    maybe_init_wandb,
     parse_args,
     parse_path_prefix_map,
+    resolve_validation_thresholds,
     resolve_cancervision_task_manifest_path,
     resolve_gpu_profile,
     save_last_checkpoint,
     setup_device_and_distributed,
+    summarize_threshold_metrics,
     validate_args,
 )
+from src.models.dynnet_runtime import RuntimeContext
 
 
 class DynnetSmokeTests(unittest.TestCase):
+    def _runtime_context(self) -> RuntimeContext:
+        return RuntimeContext(
+            device=torch.device("cpu"),
+            device_index=None,
+            distributed=False,
+            rank=0,
+            local_rank=0,
+            world_size=1,
+        )
+
     def _touch(self, path: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"")
@@ -87,6 +106,14 @@ class DynnetSmokeTests(unittest.TestCase):
         self.assertIsNone(args.val_sw_batch_size)
         self.assertIsNone(args.roi_size)
         self.assertIsNone(args.num_samples)
+        self.assertEqual(args.crop_pos_weight, 1.0)
+        self.assertEqual(args.crop_neg_weight, 1.0)
+        self.assertEqual(args.loss, "dice")
+        self.assertEqual(args.dicece_lambda_dice, 0.7)
+        self.assertEqual(args.dicece_lambda_ce, 0.3)
+        self.assertIsNone(args.val_thresholds)
+        self.assertEqual(args.min_epochs, 0)
+        self.assertEqual(args.early_stop_patience, 0)
         self.assertEqual(args.gpu_profile, "auto")
         self.assertEqual(args.dataset_source, "brats")
         self.assertIn("cancervision-standardized", str(DEFAULT_CANCERVISION_TASK_MANIFEST))
@@ -120,6 +147,193 @@ class DynnetSmokeTests(unittest.TestCase):
         slices = build_micro_batch_slices(total_batch_size=3, requested_micro_batch_size=8)
 
         self.assertEqual(slices, [slice(0, 3)])
+
+    def test_build_loss_function_supports_dicece(self) -> None:
+        args = parse_args(
+            [
+                "--roi-size",
+                "96",
+                "96",
+                "96",
+                "--num-samples",
+                "1",
+                "--model-filters",
+                "32",
+                "64",
+                "128",
+                "256",
+                "320",
+                "--val-sw-batch-size",
+                "1",
+                "--loss",
+                "dicece",
+            ]
+        )
+
+        loss = build_loss_function(args)
+
+        self.assertIsInstance(loss, DiceCELoss)
+
+    def test_build_loss_function_defaults_to_dice(self) -> None:
+        args = parse_args(
+            [
+                "--roi-size",
+                "96",
+                "96",
+                "96",
+                "--num-samples",
+                "1",
+                "--model-filters",
+                "32",
+                "64",
+                "128",
+                "256",
+                "320",
+                "--val-sw-batch-size",
+                "1",
+            ]
+        )
+
+        loss = build_loss_function(args)
+
+        self.assertIsInstance(loss, DiceLoss)
+
+    def test_resolve_validation_thresholds_defaults_to_half(self) -> None:
+        args = parse_args(
+            [
+                "--roi-size",
+                "96",
+                "96",
+                "96",
+                "--num-samples",
+                "1",
+                "--model-filters",
+                "32",
+                "64",
+                "128",
+                "256",
+                "320",
+                "--val-sw-batch-size",
+                "1",
+            ]
+        )
+
+        self.assertEqual(
+            resolve_validation_thresholds(args),
+            (DEFAULT_VALIDATION_THRESHOLD,),
+        )
+
+    def test_resolve_validation_thresholds_deduplicates_values(self) -> None:
+        args = parse_args(
+            [
+                "--roi-size",
+                "96",
+                "96",
+                "96",
+                "--num-samples",
+                "1",
+                "--model-filters",
+                "32",
+                "64",
+                "128",
+                "256",
+                "320",
+                "--val-sw-batch-size",
+                "1",
+                "--val-thresholds",
+                "0.3",
+                "0.5",
+                "0.30",
+            ]
+        )
+
+        self.assertEqual(resolve_validation_thresholds(args), (0.3, 0.5))
+
+    def test_summarize_threshold_metrics_selects_best_threshold(self) -> None:
+        metrics = summarize_threshold_metrics(
+            threshold_results={
+                0.3: {"dice_mean": 0.42, "dice_lesion": 0.42},
+                0.5: {"dice_mean": 0.51, "dice_lesion": 0.51},
+            },
+            metric_names=("lesion",),
+            include_per_threshold_metrics=True,
+        )
+
+        self.assertEqual(metrics["dice_mean"], 0.51)
+        self.assertEqual(metrics["dice_lesion"], 0.51)
+        self.assertEqual(metrics["selected_threshold"], 0.5)
+        self.assertEqual(metrics["dice_mean_threshold_0_30"], 0.42)
+        self.assertEqual(metrics["dice_mean_threshold_0_50"], 0.51)
+
+    def test_brats_train_transform_applies_crop_weights(self) -> None:
+        transform = dynnet_data_module.get_brats_train_transforms(
+            (96, 96, 96),
+            num_samples=2,
+            crop_pos_weight=3,
+            crop_neg_weight=1,
+        )
+
+        crop = next(
+            item for item in transform.transforms if isinstance(item, RandCropByPosNegLabeld)
+        )
+
+        self.assertEqual(crop.cropper.num_samples, 2)
+        self.assertAlmostEqual(crop.cropper.pos_ratio, 0.75)
+
+    def test_cancervision_train_transform_applies_crop_weights(self) -> None:
+        transform = dynnet_data_module.get_cancervision_binary_seg_train_transforms(
+            (96, 96, 96),
+            num_samples=2,
+            crop_pos_weight=3,
+            crop_neg_weight=1,
+        )
+
+        crop = next(
+            item for item in transform.transforms if isinstance(item, RandCropByPosNegLabeld)
+        )
+
+        self.assertEqual(crop.cropper.num_samples, 2)
+        self.assertAlmostEqual(crop.cropper.pos_ratio, 0.75)
+
+    def test_maybe_init_wandb_omits_entity_when_unset(self) -> None:
+        fake_run = object()
+        fake_wandb = mock.Mock()
+        fake_wandb.init.return_value = fake_run
+        args = argparse.Namespace(wandb_mode="offline")
+
+        with mock.patch.dict(sys.modules, {"wandb": fake_wandb}):
+            with mock.patch("src.models.dynnet_train.WANDB_ENTITY", None):
+                run = maybe_init_wandb(
+                    args,
+                    self._runtime_context(),
+                    {"run_name": "test-run"},
+                )
+
+        self.assertIs(run, fake_run)
+        self.assertEqual(fake_wandb.init.call_args.kwargs["project"], "cancervision")
+        self.assertEqual(fake_wandb.init.call_args.kwargs["mode"], "offline")
+        self.assertNotIn("entity", fake_wandb.init.call_args.kwargs)
+
+    def test_maybe_init_wandb_retries_offline_after_online_failure(self) -> None:
+        fake_run = object()
+        fake_wandb = mock.Mock()
+        fake_wandb.init.side_effect = [RuntimeError("PERMISSION_ERROR"), fake_run]
+        args = argparse.Namespace(wandb_mode="online")
+
+        with mock.patch.dict(sys.modules, {"wandb": fake_wandb}):
+            with mock.patch.dict(os.environ, {"WANDB_API_KEY": "secret"}, clear=False):
+                with mock.patch("src.models.dynnet_train.WANDB_ENTITY", "team-slug"):
+                    run = maybe_init_wandb(
+                        args,
+                        self._runtime_context(),
+                        {"run_name": "test-run"},
+                    )
+
+        self.assertIs(run, fake_run)
+        self.assertEqual(fake_wandb.login.call_count, 1)
+        self.assertEqual(fake_wandb.init.call_count, 2)
+        self.assertEqual(fake_wandb.init.call_args_list[0].kwargs["mode"], "online")
+        self.assertEqual(fake_wandb.init.call_args_list[1].kwargs["mode"], "offline")
 
     def test_get_dataset_config_supports_cancervision_binary_seg(self) -> None:
         config = get_dataset_config("cancervision_binary_seg")
@@ -600,6 +814,60 @@ class SingleGpuLaunchTests(unittest.TestCase):
 
         validate_args(args)
 
+    def test_validate_args_rejects_bad_thresholds(self) -> None:
+        args = parse_args(
+            [
+                "--roi-size",
+                "48",
+                "48",
+                "16",
+                "--num-samples",
+                "1",
+                "--model-filters",
+                "8",
+                "16",
+                "32",
+                "64",
+                "96",
+                "--val-sw-batch-size",
+                "1",
+                "--val-thresholds",
+                "1.2",
+            ]
+        )
+
+        with self.assertRaisesRegex(ValueError, "val-thresholds"):
+            validate_args(args)
+
+    def test_validate_args_rejects_zero_dicece_lambda_sum(self) -> None:
+        args = parse_args(
+            [
+                "--roi-size",
+                "48",
+                "48",
+                "16",
+                "--num-samples",
+                "1",
+                "--model-filters",
+                "8",
+                "16",
+                "32",
+                "64",
+                "96",
+                "--val-sw-batch-size",
+                "1",
+                "--loss",
+                "dicece",
+                "--dicece-lambda-dice",
+                "0",
+                "--dicece-lambda-ce",
+                "0",
+            ]
+        )
+
+        with self.assertRaisesRegex(ValueError, "DiceCE loss requires"):
+            validate_args(args)
+
     def test_save_and_load_resume_state_round_trip(self) -> None:
         model = build_model()
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
@@ -616,6 +884,8 @@ class SingleGpuLaunchTests(unittest.TestCase):
                 epoch=3,
                 best_metric=0.75,
                 best_metric_epoch=2,
+                best_threshold=0.4,
+                epochs_since_improve=5,
             )
 
             restored_model = build_model()
@@ -624,7 +894,13 @@ class SingleGpuLaunchTests(unittest.TestCase):
                 restored_optimizer,
                 T_max=5,
             )
-            start_epoch, best_metric, best_metric_epoch = load_resume_state(
+            (
+                start_epoch,
+                best_metric,
+                best_metric_epoch,
+                best_threshold,
+                epochs_since_improve,
+            ) = load_resume_state(
                 model=restored_model,
                 optimizer=restored_optimizer,
                 scheduler=restored_scheduler,
@@ -636,6 +912,8 @@ class SingleGpuLaunchTests(unittest.TestCase):
             self.assertEqual(start_epoch, 4)
             self.assertEqual(best_metric, 0.75)
             self.assertEqual(best_metric_epoch, 2)
+            self.assertEqual(best_threshold, 0.4)
+            self.assertEqual(epochs_since_improve, 5)
 
 
 if __name__ == "__main__":

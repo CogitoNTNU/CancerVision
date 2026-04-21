@@ -1,5 +1,15 @@
 #!/usr/bin/env python
-"""Classify brain tumor cases from segmentation predictions."""
+"""Case-level classification of BraTS predicted segmentations.
+
+Scans a directory of predicted NIfTI masks and writes a CSV row per case with:
+
+    * binary cancer/no-cancer label ("tumor" / "no_tumor") using a voxel-count threshold
+    * coarse phenotype label ("enhancing_dominant" / "core_dominant" / "edema_dominant")
+    * raw TC/WT/ET voxel counts and ratios
+
+Classification is purely derived from the segmentation mask, so upstream
+segmentation quality dominates the output.
+"""
 
 from __future__ import annotations
 
@@ -11,78 +21,56 @@ from typing import Sequence
 import nibabel as nib
 import numpy as np
 
-from .classifier_registry import ClassifierRegistry, resolve_repo_root
-from .rules import classify_profile, extract_tumor_features
+from .rules import (
+    ClassificationThresholds,
+    DEFAULT_MIN_TUMOR_VOXELS,
+    classify_profile,
+    extract_tumor_features,
+)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Classify tumor phenotype from predicted segmentation masks."
+        description="Classify predicted BraTS segmentation masks (cancer vs non-cancer + phenotype)."
     )
-    parser.add_argument(
-        "--classifier-id",
-        type=str,
-        default="brats_rule_based_v1",
-        help="Classifier id from res/classification/classifier_registry.json",
-    )
-    parser.add_argument(
-        "--registry",
-        type=str,
-        default=None,
-        help="Optional path to classifier registry JSON",
-    )
-    parser.add_argument(
-        "--input-root",
-        type=str,
-        required=True,
-        help="Directory containing predicted segmentation masks",
-    )
+    parser.add_argument("--input-root", type=str, required=True)
     parser.add_argument(
         "--glob",
         type=str,
         default="*_pred.nii.gz",
         help="Glob pattern used to discover prediction masks",
     )
+    parser.add_argument("--output-csv", type=str, required=True)
     parser.add_argument(
-        "--output-csv",
-        type=str,
-        default=None,
-        help="Output CSV path for case-level classification report",
+        "--min-tumor-voxels",
+        type=int,
+        default=DEFAULT_MIN_TUMOR_VOXELS,
+        help="Whole-tumor voxel count required to classify a case as cancerous",
     )
+    parser.add_argument("--enhancing-ratio", type=float, default=0.20)
+    parser.add_argument("--core-ratio", type=float, default=0.70)
     return parser.parse_args(argv)
 
 
-def _case_id_from_prediction_file(path: Path) -> str:
-    stem = path.name
+def _case_id(path: Path) -> str:
+    name = path.name
     for suffix in ("_pred.nii.gz", "_pred.nii"):
-        if stem.endswith(suffix):
-            return stem[: -len(suffix)]
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
     return path.stem
 
 
 def classify_predictions(
-    classifier_id: str,
-    registry_path: str | None,
+    *,
     input_root: Path,
     glob_pattern: str,
     output_csv: Path,
+    thresholds: ClassificationThresholds,
 ) -> Path:
-    registry = ClassifierRegistry(
-        repo_root=Path(__file__).resolve(),
-        registry_path=Path(registry_path) if registry_path else None,
-    )
-    spec = registry.get(classifier_id)
-
-    if spec.classifier_type != "rule_based":
-        raise ValueError(
-            f"Classifier '{classifier_id}' has unsupported type '{spec.classifier_type}'."
-            " Supported: rule_based"
-        )
-
     prediction_files = sorted(input_root.glob(glob_pattern))
     if not prediction_files:
         raise FileNotFoundError(
-            f"No prediction files found in {input_root} with pattern '{glob_pattern}'"
+            f"No prediction files found in {input_root} matching '{glob_pattern}'"
         )
 
     output_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -92,7 +80,8 @@ def classify_predictions(
             fieldnames=[
                 "case_id",
                 "prediction_path",
-                "class_label",
+                "binary_label",
+                "phenotype_label",
                 "wt_voxels",
                 "tc_voxels",
                 "et_voxels",
@@ -106,16 +95,18 @@ def classify_predictions(
         writer.writeheader()
 
         for prediction_path in prediction_files:
-            data = nib.load(str(prediction_path)).get_fdata(dtype=np.float32)
-            label_map = np.asarray(data, dtype=np.uint8)
+            volume = nib.load(str(prediction_path)).get_fdata(dtype=np.float32)
+            label_map = np.asarray(volume, dtype=np.uint8)
             profile = extract_tumor_features(label_map)
-            class_label = classify_profile(profile, spec.thresholds)
+            phenotype = classify_profile(profile, thresholds)
+            binary = "no_tumor" if profile.wt_voxels < thresholds.min_tumor_voxels else "tumor"
 
             writer.writerow(
                 {
-                    "case_id": _case_id_from_prediction_file(prediction_path),
+                    "case_id": _case_id(prediction_path),
                     "prediction_path": str(prediction_path),
-                    "class_label": class_label,
+                    "binary_label": binary,
+                    "phenotype_label": phenotype,
                     "wt_voxels": profile.wt_voxels,
                     "tc_voxels": profile.tc_voxels,
                     "et_voxels": profile.et_voxels,
@@ -132,31 +123,26 @@ def classify_predictions(
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
-
     input_root = Path(args.input_root).resolve()
     if not input_root.is_dir():
         raise FileNotFoundError(f"Input root does not exist: {input_root}")
 
-    default_csv = (
-        resolve_repo_root(Path(__file__).resolve())
-        / "res"
-        / "classification"
-        / "reports"
-        / f"{args.classifier_id}_predictions.csv"
+    output_csv = Path(args.output_csv).resolve()
+    thresholds = ClassificationThresholds(
+        min_tumor_voxels=args.min_tumor_voxels,
+        enhancing_ratio_for_aggressive=args.enhancing_ratio,
+        core_ratio_for_compact=args.core_ratio,
     )
-    output_csv = Path(args.output_csv).resolve() if args.output_csv else default_csv
 
-    print(f"Classifier id : {args.classifier_id}", flush=True)
-    print(f"Input root    : {input_root}", flush=True)
-    print(f"Pattern       : {args.glob}", flush=True)
-    print(f"Output csv    : {output_csv}", flush=True)
+    print(f"Input root : {input_root}", flush=True)
+    print(f"Pattern    : {args.glob}", flush=True)
+    print(f"Output csv : {output_csv}", flush=True)
 
     saved = classify_predictions(
-        classifier_id=args.classifier_id,
-        registry_path=args.registry,
         input_root=input_root,
         glob_pattern=args.glob,
         output_csv=output_csv,
+        thresholds=thresholds,
     )
     print(f"Saved classification report: {saved}", flush=True)
 

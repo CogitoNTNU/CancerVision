@@ -61,7 +61,8 @@ echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
 
 nvidia-smi
 
-srun "${WORKDIR}/.venv/bin/python" -m src.models.dynnet \
+srun "${WORKDIR}/.venv/bin/python" -m src.training.train \
+  --model dynunet \
   --run-name "dynunet-brats-${SLURM_JOB_ID}" \
   --wandb-mode "${WANDB_MODE:-offline}" \
-  --data-dir "${DATA_DIR:-${WORKDIR}/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData}"
+  --data-dir "${DATA_DIR:-${WORKDIR}/res/data/brats/MICCAI_BraTS2020_TrainingData}"

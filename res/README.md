@@ -1,16 +1,17 @@
 # Dataset
-**We purpously omitted including the dataset in our repository to follow the republishing constraints specified under the dataset's license agreement.**
 
-The HNTSMRG24 dataset can be downloaded from **https://zenodo.org/records/11199559**. After download, extract the training data into `res/HNTSMRG24_train/`.
+The BraTS 2020 dataset is not included here (license). Download it and place
+the training tree under `res/data/brats/MICCAI_BraTS2020_TrainingData/`
+(that path is the default for `--data-dir` in the training CLI).
 
-# Models and Inference Outputs
+# Models and inference outputs
 
-- Store inference-ready checkpoints in `res/models/`.
-- Register deployable models in `res/models/model_registry.json`.
-- Generated segmentation outputs are written to `res/predictions/` by default and are gitignored.
+- Segmentation checkpoints live in `res/models/`.
+- `res/models/model_registry.json` maps deployable model ids onto their
+  architecture and checkpoint path for the inference CLI.
+- Inference outputs default to `res/predictions/<model_id>/` (gitignored).
 
-# Training and Classification Configs
+# Classification reports
 
-- Store training experiment definitions in `res/configs/training_registry.json`.
-- Store classifier definitions in `res/classification/classifier_registry.json`.
-- Save classifier artifacts in `res/classification/models/` and reports in `res/classification/reports/`.
+Case-level classification CSVs produced by `src.classification.classify` go to
+`res/classification/reports/`.

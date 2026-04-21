@@ -89,27 +89,49 @@ For example: OS version, programs, libraries, etc.
 
 ## Usage
 
-To run the project, run the following command from the root directory of the project:
+The project solves two tasks on BraTS 2020 MRI volumes:
+
+1. **Segmentation** (primary): a 3D network predicts the BraTS tumor
+   sub-regions (TC / WT / ET) from four co-registered MRI modalities
+   (FLAIR, T1, T1ce, T2).
+2. **Classification** (secondary): a rule-based stage turns each predicted
+   mask into a binary `tumor` / `no_tumor` label plus a coarse phenotype.
+
+Unpack the BraTS training release under
+`res/data/brats/MICCAI_BraTS2020_TrainingData/` (the default `--data-dir`).
+
+### Full pipeline on a vast.ai (or any CUDA) instance
+
+One command from a fresh GPU host:
 
 ```bash
-uv run python -m src.training.train --experiment-id dynunet_brats_baseline
+git clone <repo> cancervision && cd cancervision
+cp .env.example .env   # put WANDB_API_KEY, optional DATA_DIR / DATA_ARCHIVE
+bash scripts/run_vast.sh   # extra flags forward to training, e.g. --max-epochs 50
 ```
 
-Preview a resolved training setup without running it:
+`scripts/run_vast.sh` installs `uv`, syncs the env, fetches the dataset if
+`DATA_ARCHIVE` points to a local/remote `.tar.gz` / `.tar` / `.zip`, then calls
+`python -m src.pipeline` which runs preflight (CUDA, BraTS tree integrity, W&B
+credentials) before launching training and logging to Weights & Biases.
+
+### Train a segmentation model
+
+Training is a single CLI; the model is picked from the registry in
+`src.models.registry` via `--model`.
 
 ```bash
-uv run python -m src.training.train --experiment-id dynunet_brats_baseline --dry-run
+uv run python -m src.training.train --model dynunet
 ```
 
-Run single-case inference with the registry-backed CLI:
+Only `dynunet` is wired end-to-end today. A reference `unet` builder is
+registered so the multi-model plumbing is exercised. To add a new model,
+implement a builder and register it in `src/models/registry.py`; see
+`docs/manuals/ml-lifecycle-setup.md` for the full recipe.
 
-```bash
-uv run python -m src.inference.inference \
-  --model-id dynunet_latest \
-  --case-dir /path/to/BraTS20_Training_001
-```
+Full flag list: `python -m src.training.train --help`.
 
-Run inference for all case folders in a directory:
+### Run segmentation inference
 
 ```bash
 uv run python -m src.inference.inference \
@@ -118,10 +140,20 @@ uv run python -m src.inference.inference \
   --output-root res/predictions/dynunet_latest
 ```
 
-### Model Registry
+Deployable checkpoints are declared in `res/models/model_registry.json`.
 
-Deployable model definitions live in `res/models/model_registry.json`.
-Each entry maps a model id to architecture and checkpoint metadata so inference does not depend on hardcoded paths.
+### Classify predicted segmentations
+
+Binary cancer-vs-non-cancer plus phenotype, derived from predicted masks:
+
+```bash
+uv run python -m src.classification.classify \
+  --input-root res/predictions/dynunet_latest \
+  --output-csv res/classification/reports/dynunet_latest.csv
+```
+
+A case is labelled `tumor` when the predicted Whole-Tumor region has at least
+`--min-tumor-voxels` voxels (default 16), otherwise `no_tumor`.
 
 ### Web interface (drag-and-drop inference)
 
@@ -133,18 +165,6 @@ uv run python -m src.web --host 127.0.0.1 --port 8080
 ```
 
 See `docs/manuals/web-interface.md` for details.
-
-### Classification
-
-Classify predicted segmentations into case-level tumor categories:
-
-```bash
-uv run python -m src.classification.classify \
-  --classifier-id brats_rule_based_v1 \
-  --input-root res/predictions/dynunet_latest
-```
-
-Classifier definitions live in `res/classification/classifier_registry.json`.
 
 ### Generate Documentation Site
 

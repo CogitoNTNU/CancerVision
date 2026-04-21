@@ -17,8 +17,6 @@ res/
 docs/
   manuals/
 tests/
-  test_inference_registry.py
-  test_dynnet.py
 ```
 
 ## Why This Scales Better
@@ -60,10 +58,13 @@ uv run python -m src.inference.inference \
   --output-root res/predictions/dynunet_latest
 ```
 
-## Adding New Architectures
+## Adding new architectures
 
-1. Implement a model builder in `src/inference/architectures.py`.
-2. Register it with `register_architecture("<architecture_id>", builder_fn)`.
-3. Reference this architecture ID in `res/models/model_registry.json`.
+1. Implement and register the model in `src/models/registry.py` (see
+   `docs/manuals/ml-lifecycle-setup.md` for the training-side recipe).
+2. Map an inference `architecture` id to the registered model name in
+   `src.inference.architectures._ARCHITECTURE_TO_MODEL`.
+3. Reference that architecture id from entries in
+   `res/models/model_registry.json`.
 
-This keeps model-specific logic out of the CLI and avoids hardcoded checkpoint paths.
+This keeps training and inference sharing one source of truth for architectures.

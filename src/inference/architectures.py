@@ -1,63 +1,50 @@
-"""Architecture builders used by inference model specs."""
+"""Bridge between the inference `architecture` field and the model registry.
+
+Inference model specs reference architectures by id (e.g. "dynunet_brats_v1").
+Those ids map to entries in `src.models.registry`, which is the single source of
+truth for how segmentation models are constructed.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 import torch
-from monai.networks.nets import UNet
 
-from src.models.dynnet import build_model as build_dynunet_model
+from src.models.registry import build_model, list_models
 
 from .model_registry import ModelSpec
 
-ModelBuilder = Callable[[], torch.nn.Module]
-
-
-_ARCHITECTURE_BUILDERS: dict[str, ModelBuilder] = {
-    "dynunet_brats_v1": build_dynunet_model,
-    "unet_brats_v1": lambda: UNet(
-        spatial_dims=3,
-        in_channels=4,
-        out_channels=3,
-        channels=(16, 32, 64, 128, 256),
-        strides=(2, 2, 2, 2),
-        num_res_units=2,
-        norm="INSTANCE",
-    ),
+_ARCHITECTURE_TO_MODEL: dict[str, str] = {
+    "dynunet_brats_v1": "dynunet",
+    "unet_brats_v1": "unet",
 }
 
 
-def register_architecture(name: str, builder: ModelBuilder) -> None:
-    """Register a model builder for a new architecture id."""
-    normalized = name.strip()
-    if not normalized:
-        raise ValueError("Architecture name cannot be empty")
-    _ARCHITECTURE_BUILDERS[normalized] = builder
+def register_architecture(architecture_id: str, model_name: str) -> None:
+    """Map a new inference architecture id onto a registered model name."""
+    if model_name not in list_models():
+        raise KeyError(
+            f"Unknown model '{model_name}'. Register it in src.models.registry first."
+        )
+    _ARCHITECTURE_TO_MODEL[architecture_id.strip()] = model_name
+
+
+def list_architectures() -> list[str]:
+    return sorted(_ARCHITECTURE_TO_MODEL)
 
 
 def build_model_for_spec(spec: ModelSpec) -> torch.nn.Module:
     """Build a torch model from a model registry spec."""
-    builder = _ARCHITECTURE_BUILDERS.get(spec.architecture)
-    if builder is None:
-        available = ", ".join(sorted(_ARCHITECTURE_BUILDERS.keys()))
+    model_name = _ARCHITECTURE_TO_MODEL.get(spec.architecture)
+    if model_name is None:
+        known = ", ".join(sorted(_ARCHITECTURE_TO_MODEL)) or "<none>"
         raise KeyError(
             f"Unknown architecture '{spec.architecture}' for model '{spec.model_id}'. "
-            f"Registered architectures: {available}"
+            f"Known architecture ids: {known}"
         )
 
-    model = builder()
-
-    if hasattr(model, "in_channels") and int(model.in_channels) != spec.in_channels:
-        raise ValueError(
-            f"Model '{spec.model_id}' expects in_channels={spec.in_channels}, "
-            f"builder returned in_channels={int(model.in_channels)}"
-        )
-
-    if hasattr(model, "out_channels") and int(model.out_channels) != spec.out_channels:
-        raise ValueError(
-            f"Model '{spec.model_id}' expects out_channels={spec.out_channels}, "
-            f"builder returned out_channels={int(model.out_channels)}"
-        )
-
+    model = build_model(
+        model_name,
+        in_channels=spec.in_channels,
+        out_channels=spec.out_channels,
+    )
     return model

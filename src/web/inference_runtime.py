@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from monai.inferers import sliding_window_inference
 
-from src.inference.architectures import _ARCHITECTURE_BUILDERS, build_model_for_spec
+from src.inference.architectures import build_model_for_spec, list_architectures
 from src.inference.model_registry import (
     ModelSpec,
     load_checkpoint_state_dict,
@@ -118,12 +118,12 @@ def rank_architecture_candidates(
     inferred_architecture: str | None,
 ) -> list[str]:
     """Order architecture candidates for robust uploaded-weight loading."""
-    available = sorted(_ARCHITECTURE_BUILDERS.keys())
+    available = list_architectures()
     ordered: list[str] = []
     for candidate in (inferred_architecture, requested_architecture, *available):
         if candidate is None:
             continue
-        if candidate not in _ARCHITECTURE_BUILDERS:
+        if candidate not in available:
             continue
         if candidate in ordered:
             continue

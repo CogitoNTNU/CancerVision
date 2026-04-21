@@ -1,5 +1,5 @@
-"""Training orchestration tools for model experiments."""
+"""Training entrypoint and runtime helpers."""
 
-from .experiment_registry import ExperimentRegistry, TrainingSpec
+from .distributed import RuntimeContext, cleanup, setup_runtime
 
-__all__ = ["ExperimentRegistry", "TrainingSpec"]
+__all__ = ["RuntimeContext", "cleanup", "setup_runtime"]

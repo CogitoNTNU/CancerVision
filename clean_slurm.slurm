@@ -67,11 +67,12 @@ WANDB_MODE_CLEAN="${WANDB_MODE_CLEAN//$'\n'/}"
 nvidia-smi
 
 srun --ntasks="${GPU_COUNT}" --ntasks-per-node="${GPU_COUNT}" --gpus-per-task=1 \
-  "${WORKDIR}/.venv/bin/python" -m src.models.dynnet \
+  "${WORKDIR}/.venv/bin/python" -m src.training.train \
+  --model dynunet \
   --batch-size 1 \
   --num-samples 4 \
   --roi-size 128 128 128 \
   --wandb-mode "${WANDB_MODE_CLEAN}" \
   --run-name "dynunet-brats-${SLURM_JOB_ID:-local}" \
-  --data-dir /cluster/home/eldarja/CancerVision/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData
+  --data-dir "${DATA_DIR:-${WORKDIR}/res/data/brats/MICCAI_BraTS2020_TrainingData}"
 

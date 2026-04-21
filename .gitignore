@@ -256,9 +256,6 @@ lerna-debug.log
 .DS_Store
 Thumbs.db
 
-# Training dataset
-res/dataset/*
-
 # Inference outputs
 res/predictions/
 res/classification/reports/

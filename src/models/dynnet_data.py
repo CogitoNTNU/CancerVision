@@ -32,6 +32,7 @@ from src.datasets import (
     build_brats_data_dicts,
 )
 from src.datasets.standardize.pathing import resolve_existing_path
+from src.datasets.standardize.registry import get_dataset_registry_entry
 from src.models.dynnet_config import (
     DEFAULT_CANCERVISION_DATASET_ROOT,
     DatasetConfig,
@@ -74,12 +75,31 @@ def _has_usable_segmentation_rows(rows: Sequence[dict[str, str]]) -> bool:
     for row in rows:
         if row.get("exclude_reason"):
             continue
+        if _is_brain_mask_segmentation_source(row):
+            continue
         if not row.get("image_path") or not row.get("mask_path"):
             continue
         split_name = (row.get("task_split") or "").strip().lower()
         if split_name in allowed_splits:
             return True
     return False
+
+
+def _is_brain_mask_segmentation_source(row: dict[str, str]) -> bool:
+    if row.get("brain_mask_path"):
+        return True
+    if row.get("normalization_mask_method") == "synthstrip":
+        return True
+
+    dataset_key = row.get("dataset_key", "").strip()
+    if not dataset_key:
+        return False
+
+    try:
+        registry_entry = get_dataset_registry_entry(dataset_key)
+    except KeyError:
+        return False
+    return registry_entry.cls_skullstrip_policy == "synthstrip"
 
 
 def infer_cancervision_path_prefix_maps(
@@ -213,6 +233,8 @@ def build_cancervision_segmentation_splits(
     for index, row in enumerate(rows, start=1):
         if row.get("exclude_reason"):
             continue
+        if _is_brain_mask_segmentation_source(row):
+            continue
         if not row.get("image_path") or not row.get("mask_path"):
             continue
 
@@ -273,7 +295,12 @@ def build_cancervision_segmentation_splits(
     return split_rows["train"], split_rows["val"], split_rows["test"]
 
 
-def get_brats_train_transforms(roi_size: Sequence[int], num_samples: int) -> Compose:
+def get_brats_train_transforms(
+    roi_size: Sequence[int],
+    num_samples: int,
+    crop_pos_weight: float,
+    crop_neg_weight: float,
+) -> Compose:
     return Compose(
         [
             LoadImaged(keys=["image", "label"]),
@@ -284,8 +311,8 @@ def get_brats_train_transforms(roi_size: Sequence[int], num_samples: int) -> Com
                 keys=["image", "label"],
                 label_key="label",
                 spatial_size=roi_size,
-                pos=1,
-                neg=1,
+                pos=crop_pos_weight,
+                neg=crop_neg_weight,
                 num_samples=num_samples,
                 image_key="image",
                 image_threshold=0,
@@ -314,6 +341,8 @@ def get_brats_val_transforms() -> Compose:
 def get_cancervision_binary_seg_train_transforms(
     roi_size: Sequence[int],
     num_samples: int,
+    crop_pos_weight: float,
+    crop_neg_weight: float,
 ) -> Compose:
     return Compose(
         [
@@ -327,8 +356,8 @@ def get_cancervision_binary_seg_train_transforms(
                 keys=["image", "label"],
                 label_key="label",
                 spatial_size=roi_size,
-                pos=1,
-                neg=1,
+                pos=crop_pos_weight,
+                neg=crop_neg_weight,
                 num_samples=num_samples,
                 image_key="image",
                 image_threshold=0,

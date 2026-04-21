@@ -768,6 +768,23 @@ def _segmentation_brain_mask_path_for_case(case_output_root: str | Path) -> Path
     return Path(case_output_root) / "seg" / "brain_mask.nii.gz"
 
 
+def _segmentation_row_uses_brain_mask(row: dict[str, str]) -> bool:
+    if _text(row.get("brain_mask_path")):
+        return True
+    if _text(row.get("normalization_mask_method")) == "synthstrip":
+        return True
+
+    dataset_key = _text(row.get("dataset_key"))
+    if not dataset_key:
+        return False
+
+    try:
+        registry_entry = get_dataset_registry_entry(dataset_key)
+    except KeyError:
+        return False
+    return registry_entry.cls_skullstrip_policy == "synthstrip"
+
+
 def _is_valid_materialized_nifti(
     image_path: Path,
     *,
@@ -1268,6 +1285,16 @@ def materialize_segmentation_manifest(
                     clear_mask=True,
                 )
             )
+            processed_count += 1
+            continue
+
+        if _segmentation_row_uses_brain_mask(row):
+            excluded_row = _blank_materialized_paths(
+                materialized_row,
+                clear_mask=True,
+            )
+            excluded_row["exclude_reason"] = "brain_mask_source"
+            materialized_rows.append(excluded_row)
             processed_count += 1
             continue
 

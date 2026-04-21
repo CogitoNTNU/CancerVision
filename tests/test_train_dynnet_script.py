@@ -19,3 +19,11 @@ class TrainDynnetScriptTests(unittest.TestCase):
 
         self.assertIn("command -v uv", script)
         self.assertIn("uv run --no-sync python -m src.models.dynnet", script)
+        self.assertIn('GPU_PROFILE="${GPU_PROFILE:-gpu40g}"', script)
+        self.assertIn('LOSS="${LOSS:-dicece}"', script)
+        self.assertIn('CROP_POS_WEIGHT="${CROP_POS_WEIGHT:-3}"', script)
+        self.assertIn('VAL_THRESHOLDS="${VAL_THRESHOLDS:-0.30 0.35 0.40 0.45 0.50 0.55 0.60}"', script)
+        self.assertIn("--loss", script)
+        self.assertIn("--crop-pos-weight", script)
+        self.assertIn("--val-thresholds", script)
+        self.assertIn("--early-stop-patience", script)

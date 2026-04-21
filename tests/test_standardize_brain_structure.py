@@ -53,6 +53,7 @@ from src.datasets.standardize.adapters.yale_brain_mets_longitudinal import (
     parse_yale_series_path,
 )
 from src.datasets.standardize.constants import (
+    CFB_GBM_DATASET_KEY,
     CFB_GBM_PREPROC_PROFILE,
     BRATS2020_PREPROC_PROFILE,
     BRATS2023_PREPROC_PROFILE,
@@ -67,7 +68,9 @@ from src.datasets.standardize.constants import (
     UCSF_PDGM_PREPROC_PROFILE,
     UTSW_GLIOMA_PREPROC_PROFILE,
     UPENN_GBM_PREPROC_PROFILE,
+    VESTIBULAR_SCHWANNOMA_MC_RC2_DATASET_KEY,
     VESTIBULAR_SCHWANNOMA_MC_RC2_PREPROC_PROFILE,
+    YALE_BRAIN_METS_LONGITUDINAL_DATASET_KEY,
     YALE_BRAIN_METS_LONGITUDINAL_PREPROC_PROFILE,
 )
 from src.datasets.standardize.pathing import (
@@ -998,6 +1001,78 @@ class BrainStructureStandardizeTests(unittest.TestCase):
                 if row["subject_id"] == "brain_structure:OASIS-2:AD1"
             },
             {"test"},
+        )
+
+    def test_segmentation_task_manifests_exclude_brain_mask_sources(self) -> None:
+        rows = [
+            _segmentation_row(
+                dataset_key="brats2020",
+                image_path="/tmp/brats_image.nii.gz",
+                mask_path="/tmp/brats_mask.nii.gz",
+                global_case_id="brats2020__case-1",
+                subject_id="brats2020:case-1",
+                preproc_profile="brats2020_native_anchor_to_seg",
+            ),
+            _segmentation_row(
+                dataset_key=REMIND_DATASET_KEY,
+                image_path="/tmp/remind_image.nii.gz",
+                mask_path="/tmp/remind_mask.nrrd",
+                global_case_id="remind__case-1",
+                subject_id="remind:case-1",
+                preproc_profile="remind_native_anchor_to_seg",
+            ),
+            _segmentation_row(
+                dataset_key=VESTIBULAR_SCHWANNOMA_MC_RC2_DATASET_KEY,
+                image_path="/tmp/vestibular_image.nii.gz",
+                mask_path="/tmp/vestibular_mask.nii.gz",
+                global_case_id="vestibular_schwannoma_mc_rc2__case-1",
+                subject_id="vestibular_schwannoma_mc_rc2:case-1",
+                preproc_profile="vestibular_schwannoma_mc_rc2_native_anchor_to_seg",
+            ),
+            _segmentation_row(
+                dataset_key=CFB_GBM_DATASET_KEY,
+                image_path="/tmp/cfb_image.nii.gz",
+                mask_path="/tmp/cfb_mask.nii.gz",
+                global_case_id="cfb_gbm__case-1",
+                subject_id="cfb_gbm:case-1",
+                preproc_profile="cfb_gbm_native_anchor_to_seg",
+            ),
+            _segmentation_row(
+                dataset_key=YALE_BRAIN_METS_LONGITUDINAL_DATASET_KEY,
+                image_path="/tmp/yale_image.nii.gz",
+                mask_path="/tmp/yale_mask.nii.gz",
+                global_case_id="yale_brain_mets_longitudinal__case-1",
+                subject_id="yale_brain_mets_longitudinal:case-1",
+                preproc_profile="yale_brain_mets_longitudinal_native_anchor_to_seg",
+            ),
+            {
+                **_segmentation_row(
+                    dataset_key="upenn_gbm",
+                    image_path="/tmp/upenn_image.nii.gz",
+                    mask_path="/tmp/upenn_mask.nii.gz",
+                    global_case_id="upenn_gbm__case-1",
+                    subject_id="upenn_gbm:case-1",
+                    preproc_profile="upenn_gbm_native_anchor_to_seg",
+                ),
+                "brain_mask_path": "/tmp/upenn_brain_mask.nii.gz",
+            },
+        ]
+
+        manifests = build_all_task_manifests(rows)
+
+        self.assertEqual(
+            {
+                row["dataset_key"]
+                for row in manifests["segmentation_binary_curated.csv"]
+            },
+            {"brats2020"},
+        )
+        self.assertEqual(
+            {
+                row["dataset_key"]
+                for row in manifests["segmentation_binary_broad.csv"]
+            },
+            {"brats2020"},
         )
 
     def test_skip_policy_avoids_synthstrip(self) -> None:
@@ -1933,24 +2008,14 @@ class BrainStructureStandardizeTests(unittest.TestCase):
             self.assertEqual(reloaded_image.shape, (4, 4, 4))
             self.assertEqual(reloaded_mask.shape, (4, 4, 4))
 
-    def test_materialize_segmentation_manifest_copies_directory_image_inputs(self) -> None:
+    def test_materialize_segmentation_manifest_excludes_brain_mask_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            image_dir = root / "ReMIND-003" / "study-a" / "series-t1-post"
-            _write_dicom_series(
-                image_dir,
-                series_description="3D_AX_T1_postcontrast",
-                base_value=10,
-                num_slices=4,
-            )
-            mask_path = root / "ReMIND-003" / "study-a" / "seg.nrrd"
-            nrrd.write(str(mask_path), np.full((4, 4, 4), 1.0, dtype=np.uint8))
-
             rows = [
                 _segmentation_row(
                     dataset_key=REMIND_DATASET_KEY,
-                    image_path=str(image_dir),
-                    mask_path=str(mask_path),
+                    image_path=str(root / "ReMIND-003" / "series-t1-post"),
+                    mask_path=str(root / "ReMIND-003" / "seg.nrrd"),
                     global_case_id="remind__003__study-a__seg",
                     subject_id="remind:003",
                     preproc_profile="remind_native_anchor_to_seg",
@@ -1958,40 +2023,23 @@ class BrainStructureStandardizeTests(unittest.TestCase):
             ]
 
             with mock.patch(
-                "src.datasets.standardize.preprocess.shutil.which",
-                return_value="/usr/bin/mri_synthstrip",
-            ), mock.patch(
-                "src.datasets.standardize.preprocess._run_synthstrip",
-                return_value=(
-                    np.full((4, 4, 4), 11.0, dtype=np.float32),
-                    np.ones((4, 4, 4), dtype=np.uint8),
-                ),
+                "src.datasets.standardize.preprocess.write_segmentation_pair",
+                side_effect=AssertionError("brain-mask sources should not be copied"),
             ):
-                materialized_rows, _ = materialize_segmentation_manifest(
+                materialized_rows, manifest_path = materialize_segmentation_manifest(
                     rows,
                     root / "db",
                 )
 
+            self.assertTrue(manifest_path.is_file())
             self.assertEqual(len(materialized_rows), 1)
             materialized_row = materialized_rows[0]
-            copied_image_path = Path(materialized_row["image_path"])
-            copied_mask_path = Path(materialized_row["mask_path"])
-            copied_brain_mask_path = Path(materialized_row["brain_mask_path"])
-            self.assertTrue(copied_image_path.is_file())
-            self.assertTrue(copied_mask_path.is_file())
-            self.assertTrue(copied_brain_mask_path.is_file())
-            self.assertTrue(materialized_row["image_path"].endswith(".nii.gz"))
-            self.assertTrue(materialized_row["mask_path"].endswith(".nii.gz"))
-            self.assertEqual(materialized_row["normalization_mask_method"], "synthstrip")
-            self.assertTrue(materialized_row["preproc_profile"].endswith("_synthstrip"))
-            converted_image = np.asanyarray(nib.load(str(copied_image_path)).dataobj)
-            converted_mask = np.asanyarray(nib.load(str(copied_mask_path)).dataobj)
-            converted_brain_mask = np.asanyarray(
-                nib.load(str(copied_brain_mask_path)).dataobj
-            )
-            self.assertEqual(converted_image.shape, (4, 4, 4))
-            self.assertEqual(converted_mask.shape, (4, 4, 4))
-            self.assertEqual(converted_brain_mask.shape, (4, 4, 4))
+            self.assertEqual(materialized_row["exclude_reason"], "brain_mask_source")
+            self.assertEqual(materialized_row["image_path"], "")
+            self.assertEqual(materialized_row["mask_path"], "")
+            self.assertEqual(materialized_row["t1_path"], "")
+            self.assertEqual(materialized_row["brain_mask_path"], "")
+            self.assertEqual(materialized_row["normalization_mask_method"], "")
 
     def test_materialize_segmentation_manifest_reuses_existing_outputs_without_reprocessing(
         self,

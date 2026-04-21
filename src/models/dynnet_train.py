@@ -209,9 +209,6 @@ def maybe_init_wandb(
 
     mode = args.wandb_mode
     api_key = os.getenv("WANDB_API_KEY")
-    if mode == "online" and not api_key:
-        print("WANDB_API_KEY missing; falling back to offline mode.", flush=True)
-        mode = "offline"
 
     print(f"W&B target: {_format_wandb_target()}  mode: {mode}", flush=True)
 
@@ -244,7 +241,7 @@ def load_resume_state(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
-    scaler: torch.cuda.amp.GradScaler | None,
+    scaler: torch.amp.GradScaler | None,
     resume_path: str | None,
     context: RuntimeContext,
 ) -> tuple[int, float, int, float, int]:
@@ -290,7 +287,7 @@ def save_last_checkpoint(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
-    scaler: torch.cuda.amp.GradScaler | None,
+    scaler: torch.amp.GradScaler | None,
     epoch: int,
     best_metric: float,
     best_metric_epoch: int,
@@ -316,7 +313,7 @@ def train_one_epoch(
     train_loader: DataLoader,
     loss_function: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
-    scaler: torch.cuda.amp.GradScaler | None,
+    scaler: torch.amp.GradScaler | None,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
     epoch: int,
     args: argparse.Namespace,
@@ -599,7 +596,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             optimizer, T_max=args.max_epochs
         )
         scaler = (
-            torch.cuda.amp.GradScaler(enabled=True)
+            torch.amp.GradScaler("cuda", enabled=True)
             if should_use_amp(args, context)
             else None
         )

@@ -335,6 +335,26 @@ class DynnetSmokeTests(unittest.TestCase):
         self.assertEqual(fake_wandb.init.call_args_list[0].kwargs["mode"], "online")
         self.assertEqual(fake_wandb.init.call_args_list[1].kwargs["mode"], "offline")
 
+    def test_maybe_init_wandb_online_without_api_key_uses_existing_login(self) -> None:
+        fake_run = object()
+        fake_wandb = mock.Mock()
+        fake_wandb.init.return_value = fake_run
+        args = argparse.Namespace(wandb_mode="online")
+
+        with mock.patch.dict(sys.modules, {"wandb": fake_wandb}):
+            with mock.patch.dict(os.environ, {}, clear=True):
+                with mock.patch("src.models.dynnet_train.WANDB_ENTITY", None):
+                    run = maybe_init_wandb(
+                        args,
+                        self._runtime_context(),
+                        {"run_name": "test-run"},
+                    )
+
+        self.assertIs(run, fake_run)
+        self.assertEqual(fake_wandb.login.call_count, 0)
+        self.assertEqual(fake_wandb.init.call_count, 1)
+        self.assertEqual(fake_wandb.init.call_args.kwargs["mode"], "online")
+
     def test_get_dataset_config_supports_cancervision_binary_seg(self) -> None:
         config = get_dataset_config("cancervision_binary_seg")
 
@@ -372,6 +392,44 @@ class DynnetSmokeTests(unittest.TestCase):
             self.assertEqual(train_rows, [{"image": os.path.normpath(str(image1)), "label": os.path.normpath(str(mask1))}])
             self.assertEqual(val_rows, [{"image": os.path.normpath(str(image2)), "label": os.path.normpath(str(mask2))}])
             self.assertEqual(test_rows, [{"image": os.path.normpath(str(image3)), "label": os.path.normpath(str(mask3))}])
+
+    def test_build_cancervision_segmentation_splits_skips_brain_mask_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            keep_image = self._touch(root / "keep_image.nii.gz")
+            keep_mask = self._touch(root / "keep_mask.nii.gz")
+            skipped_image = self._touch(root / "skipped_image.nii.gz")
+            skipped_mask = self._touch(root / "skipped_mask.nii.gz")
+            synthstrip_image = self._touch(root / "synthstrip_image.nii.gz")
+            synthstrip_mask = self._touch(root / "synthstrip_mask.nii.gz")
+            manifest = root / "segmentation_binary_curated.csv"
+            manifest.write_text(
+                "\n".join(
+                    [
+                        "task_name,task_split,global_case_id,dataset_key,image_path,mask_path,brain_mask_path,normalization_mask_method,exclude_reason",
+                        f"segmentation_binary_curated,train,keep,brats2020,{keep_image},{keep_mask},,,",
+                        f"segmentation_binary_curated,train,brain-mask,upenn_gbm,{skipped_image},{skipped_mask},{root / 'brain_mask.nii.gz'},,",
+                        f"segmentation_binary_curated,train,synthstrip-dataset,cfb_gbm,{synthstrip_image},{synthstrip_mask},,,",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            train_rows, val_rows, test_rows = build_cancervision_segmentation_splits(
+                manifest
+            )
+
+            self.assertEqual(
+                train_rows,
+                [
+                    {
+                        "image": os.path.normpath(str(keep_image)),
+                        "label": os.path.normpath(str(keep_mask)),
+                    }
+                ],
+            )
+            self.assertEqual(val_rows, [])
+            self.assertEqual(test_rows, [])
 
     def test_build_cancervision_segmentation_splits_ignores_extra_csv_columns(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

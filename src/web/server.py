@@ -58,10 +58,10 @@ def create_app() -> FastAPI:
     @app.post("/api/infer")
     async def run_inference(
         weights: UploadFile = File(...),
-        flair: UploadFile = File(...),
-        t1: UploadFile = File(...),
-        t1ce: UploadFile = File(...),
-        t2: UploadFile = File(...),
+        flair: UploadFile | None = File(None),
+        t1: UploadFile | None = File(None),
+        t1ce: UploadFile | None = File(None),
+        t2: UploadFile | None = File(None),
         architecture: str = Form("dynunet_brats_v1"),
         device: str = Form("auto"),
         threshold: float = Form(0.5),
@@ -89,12 +89,33 @@ def create_app() -> FastAPI:
 
         try:
             weights_path = _save_upload(weights, job_dir / "weights.pth")
-            modality_paths = [
-                _save_upload(flair, job_dir / f"case_flair{_extension(flair.filename)}"),
-                _save_upload(t1, job_dir / f"case_t1{_extension(t1.filename)}"),
-                _save_upload(t1ce, job_dir / f"case_t1ce{_extension(t1ce.filename)}"),
-                _save_upload(t2, job_dir / f"case_t2{_extension(t2.filename)}"),
-            ]
+
+            uploads_by_modality = {
+                "flair": flair,
+                "t1": t1,
+                "t1ce": t1ce,
+                "t2": t2,
+            }
+            provided_uploads = {
+                name: upload
+                for name, upload in uploads_by_modality.items()
+                if upload is not None and upload.filename
+            }
+            if not provided_uploads:
+                raise HTTPException(
+                    status_code=400,
+                    detail="At least one modality file must be provided",
+                )
+
+            saved_modalities: dict[str, Path] = {}
+            for modality_name, upload in provided_uploads.items():
+                saved_modalities[modality_name] = _save_upload(
+                    upload,
+                    job_dir / f"case_{modality_name}{_extension(upload.filename)}",
+                )
+
+            fallback_path = next(iter(saved_modalities.values()))
+            modality_paths = [saved_modalities.get(modality, fallback_path) for modality in MODALITY_ORDER]
 
             try:
                 torch_device = resolve_device(device)
@@ -131,10 +152,17 @@ def create_app() -> FastAPI:
             return JSONResponse(
                 {
                     "job_id": job_id,
-                    "architecture": architecture,
+                    "architecture": spec.architecture,
+                    "requested_architecture": architecture,
                     "device": str(torch_device),
                     "threshold": threshold,
                     "roi_size": list(parsed_roi),
+                    "submitted_modalities": sorted(saved_modalities.keys()),
+                    "filled_modalities": [
+                        modality
+                        for modality in MODALITY_ORDER
+                        if modality not in saved_modalities
+                    ],
                     "output_filename": saved.name,
                     "download_url": f"/api/download/{job_id}",
                     "label_counts": counts,

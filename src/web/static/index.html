@@ -29,39 +29,39 @@
       </section>
 
       <section class="card">
-        <h2>2. Drop the four MRI modalities</h2>
+        <h2>2. Drop one or more MRI modalities</h2>
         <p class="hint">
           NIfTI files (<code>.nii</code> or <code>.nii.gz</code>). Files whose names
           include <code>flair</code>, <code>t1ce</code>, <code>t1</code>, or
-          <code>t2</code> are auto-assigned — you can also drop all four into any slot
-          and they will be routed automatically.
+          <code>t2</code> are auto-assigned. You can upload a single modality or all
+          four. Missing channels are auto-filled using one uploaded modality.
         </p>
         <div class="modalities">
           <div class="dropzone modality" data-slot="flair" data-modality="flair">
             <div class="dropzone-inner">
               <strong>FLAIR</strong>
-              <span class="dz-status">Drop .nii(.gz)</span>
+              <span class="dz-status">Drop .nii(.gz) (optional)</span>
             </div>
             <input type="file" accept=".nii,.nii.gz" hidden />
           </div>
           <div class="dropzone modality" data-slot="t1" data-modality="t1">
             <div class="dropzone-inner">
               <strong>T1</strong>
-              <span class="dz-status">Drop .nii(.gz)</span>
+              <span class="dz-status">Drop .nii(.gz) (optional)</span>
             </div>
             <input type="file" accept=".nii,.nii.gz" hidden />
           </div>
           <div class="dropzone modality" data-slot="t1ce" data-modality="t1ce">
             <div class="dropzone-inner">
               <strong>T1CE</strong>
-              <span class="dz-status">Drop .nii(.gz)</span>
+              <span class="dz-status">Drop .nii(.gz) (optional)</span>
             </div>
             <input type="file" accept=".nii,.nii.gz" hidden />
           </div>
           <div class="dropzone modality" data-slot="t2" data-modality="t2">
             <div class="dropzone-inner">
               <strong>T2</strong>
-              <span class="dz-status">Drop .nii(.gz)</span>
+              <span class="dz-status">Drop .nii(.gz) (optional)</span>
             </div>
             <input type="file" accept=".nii,.nii.gz" hidden />
           </div>

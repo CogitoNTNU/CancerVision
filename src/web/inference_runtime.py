@@ -9,8 +9,12 @@ import numpy as np
 import torch
 from monai.inferers import sliding_window_inference
 
-from src.inference.architectures import build_model_for_spec
-from src.inference.model_registry import ModelSpec
+from src.inference.architectures import _ARCHITECTURE_BUILDERS, build_model_for_spec
+from src.inference.model_registry import (
+    ModelSpec,
+    load_checkpoint_state_dict,
+    load_weights_with_fallbacks,
+)
 from src.inference.pipeline import _normalize_nonzero, channels_to_brats_labels
 
 
@@ -46,30 +50,85 @@ def build_model_from_weights(
     threshold: float = 0.5,
 ) -> tuple[torch.nn.Module, ModelSpec]:
     """Build a model from an arbitrary checkpoint file on disk."""
-    spec = ModelSpec(
-        model_id="user_upload",
-        architecture=architecture,
-        checkpoint=checkpoint_path,
-        in_channels=in_channels,
-        out_channels=out_channels,
-        roi_size=roi_size,
-        sw_batch_size=sw_batch_size,
-        overlap=overlap,
-        threshold=threshold,
+    state_dict = load_checkpoint_state_dict(checkpoint_path, map_location=device)
+    inferred_architecture = infer_architecture_from_state_dict(state_dict)
+    architectures_to_try = rank_architecture_candidates(
+        requested_architecture=architecture,
+        inferred_architecture=inferred_architecture,
     )
 
-    model = build_model_for_spec(spec)
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    state_dict = checkpoint.get("model_state") if isinstance(checkpoint, dict) else checkpoint
-    if state_dict is None:
-        raise ValueError(
-            f"Checkpoint {checkpoint_path} is missing 'model_state' and is not a raw state_dict"
+    errors: list[str] = []
+    for candidate_architecture in architectures_to_try:
+        spec = ModelSpec(
+            model_id="user_upload",
+            architecture=candidate_architecture,
+            checkpoint=checkpoint_path,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            roi_size=roi_size,
+            sw_batch_size=sw_batch_size,
+            overlap=overlap,
+            threshold=threshold,
         )
 
-    model.load_state_dict(state_dict)
-    model.to(device)
-    model.eval()
-    return model, spec
+        model = build_model_for_spec(spec)
+        try:
+            load_weights_with_fallbacks(
+                model,
+                checkpoint_path,
+                map_location=device,
+                state_dict=state_dict,
+            )
+        except ValueError as exc:
+            errors.append(f"{candidate_architecture}: {exc}")
+            continue
+
+        model.to(device)
+        model.eval()
+        return model, spec
+
+    inferred = inferred_architecture or "unknown"
+    summary = " | ".join(errors)
+    raise ValueError(
+        "Could not match uploaded weights to a registered architecture. "
+        f"Requested='{architecture}', inferred_hint='{inferred}', "
+        f"tried={architectures_to_try}. Details: {summary}"
+    )
+
+
+def infer_architecture_from_state_dict(
+    state_dict: dict[str, torch.Tensor],
+) -> str | None:
+    """Infer likely model family from known state_dict key signatures."""
+    keys = tuple(state_dict.keys())
+
+    if any(key.startswith("input_block.") for key in keys):
+        return "dynunet_brats_v1"
+
+    if any(key.startswith("model.") for key in keys) and any(
+        ".submodule." in key for key in keys
+    ):
+        return "unet_brats_v1"
+
+    return None
+
+
+def rank_architecture_candidates(
+    requested_architecture: str,
+    inferred_architecture: str | None,
+) -> list[str]:
+    """Order architecture candidates for robust uploaded-weight loading."""
+    available = sorted(_ARCHITECTURE_BUILDERS.keys())
+    ordered: list[str] = []
+    for candidate in (inferred_architecture, requested_architecture, *available):
+        if candidate is None:
+            continue
+        if candidate not in _ARCHITECTURE_BUILDERS:
+            continue
+        if candidate in ordered:
+            continue
+        ordered.append(candidate)
+    return ordered
 
 
 def _load_and_stack(modality_files: list[Path]) -> tuple[torch.Tensor, nib.Nifti1Image]:

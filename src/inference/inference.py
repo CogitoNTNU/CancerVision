@@ -10,7 +10,7 @@ from typing import Sequence
 import torch
 
 from .architectures import build_model_for_spec
-from .model_registry import ModelRegistry, resolve_repo_root
+from .model_registry import ModelRegistry, load_weights_with_fallbacks, resolve_repo_root
 from .pipeline import infer_case
 
 
@@ -103,14 +103,7 @@ def load_model(model_id: str, registry_path: str | None, device: torch.device):
         )
 
     model = build_model_for_spec(spec)
-    checkpoint = torch.load(spec.checkpoint, map_location=device)
-    state_dict = checkpoint.get("model_state") if isinstance(checkpoint, dict) else checkpoint
-    if state_dict is None:
-        raise ValueError(
-            f"Checkpoint {spec.checkpoint} is missing 'model_state' and is not a raw state_dict"
-        )
-
-    model.load_state_dict(state_dict)
+    load_weights_with_fallbacks(model, spec.checkpoint, map_location=device)
     model.to(device)
     model.eval()
     return model, spec

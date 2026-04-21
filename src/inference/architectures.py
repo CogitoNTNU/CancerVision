@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import torch
+from monai.networks.nets import UNet
 
 from src.models.dynnet import build_model as build_dynunet_model
 
@@ -15,6 +16,15 @@ ModelBuilder = Callable[[], torch.nn.Module]
 
 _ARCHITECTURE_BUILDERS: dict[str, ModelBuilder] = {
     "dynunet_brats_v1": build_dynunet_model,
+    "unet_brats_v1": lambda: UNet(
+        spatial_dims=3,
+        in_channels=4,
+        out_channels=3,
+        channels=(16, 32, 64, 128, 256),
+        strides=(2, 2, 2, 2),
+        num_res_units=2,
+        norm="INSTANCE",
+    ),
 }
 
 

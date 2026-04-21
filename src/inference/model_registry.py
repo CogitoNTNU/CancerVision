@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import torch
+
 DEFAULT_REGISTRY_RELATIVE_PATH = Path("res/models/model_registry.json")
 
 
@@ -130,3 +132,113 @@ class ModelRegistry:
             output_labels=output_labels,
             threshold=float(raw.get("threshold", 0.5)),
         )
+
+
+def _looks_like_state_dict(value: Any) -> bool:
+    if not isinstance(value, dict) or not value:
+        return False
+    if not all(isinstance(key, str) for key in value):
+        return False
+    return all(torch.is_tensor(tensor) for tensor in value.values())
+
+
+def _strip_prefix(
+    state_dict: dict[str, torch.Tensor],
+    prefix: str,
+) -> dict[str, torch.Tensor]:
+    if not state_dict:
+        return state_dict
+
+    keys = list(state_dict.keys())
+    prefixed = [key.startswith(prefix) for key in keys]
+    if sum(prefixed) < len(keys):
+        return state_dict
+
+    return {key[len(prefix) :]: value for key, value in state_dict.items()}
+
+
+def _extract_state_dict(
+    checkpoint: Any,
+    checkpoint_path: Path,
+) -> dict[str, torch.Tensor]:
+    if _looks_like_state_dict(checkpoint):
+        return checkpoint
+
+    if not isinstance(checkpoint, dict):
+        raise ValueError(
+            f"Checkpoint {checkpoint_path} is not a mapping and does not contain model weights"
+        )
+
+    candidate_keys = (
+        "model_state",
+        "state_dict",
+        "model",
+        "model_dict",
+        "network",
+        "net",
+        "weights",
+    )
+    for key in candidate_keys:
+        value = checkpoint.get(key)
+        if _looks_like_state_dict(value):
+            return value
+
+    for value in checkpoint.values():
+        if _looks_like_state_dict(value):
+            return value
+
+    raise ValueError(
+        f"Checkpoint {checkpoint_path} does not contain a recognizable state_dict "
+        "(expected raw state_dict or a key like model_state/state_dict)"
+    )
+
+
+def load_checkpoint_state_dict(
+    checkpoint_path: Path,
+    *,
+    map_location: torch.device,
+) -> dict[str, torch.Tensor]:
+    """Load and normalize checkpoint content into a plain state_dict."""
+    checkpoint = torch.load(checkpoint_path, map_location=map_location, weights_only=False)
+    return _extract_state_dict(checkpoint, checkpoint_path)
+
+
+def load_weights_with_fallbacks(
+    model: torch.nn.Module,
+    checkpoint_path: Path,
+    *,
+    map_location: torch.device,
+    state_dict: dict[str, torch.Tensor] | None = None,
+) -> None:
+    """Load model weights from common checkpoint formats and wrapper prefixes."""
+    loaded_state_dict = (
+        state_dict
+        if state_dict is not None
+        else load_checkpoint_state_dict(checkpoint_path, map_location=map_location)
+    )
+
+    candidate_prefixes = ("", "module.", "model.", "model.module.", "net.", "network.")
+    errors: list[str] = []
+
+    for prefix in candidate_prefixes:
+        candidate = loaded_state_dict if not prefix else _strip_prefix(loaded_state_dict, prefix)
+        try:
+            incompatible = model.load_state_dict(candidate, strict=False)
+            missing_count = len(incompatible.missing_keys)
+            unexpected_count = len(incompatible.unexpected_keys)
+            if missing_count == 0 and unexpected_count == 0:
+                model.load_state_dict(candidate, strict=True)
+                return
+
+            errors.append(
+                f"prefix='{prefix or '<none>'}': "
+                f"{missing_count} missing keys, {unexpected_count} unexpected keys"
+            )
+        except RuntimeError as exc:
+            error_message = str(exc).split("\n", maxsplit=1)[0]
+            errors.append(f"prefix='{prefix or '<none>'}': {error_message}")
+
+    details = " | ".join(errors)
+    raise ValueError(
+        f"Unable to load checkpoint {checkpoint_path}. Tried key-prefix variants: {details}"
+    )

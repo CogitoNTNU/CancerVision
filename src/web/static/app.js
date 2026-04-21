@@ -38,16 +38,15 @@
       if (slot === "weights") {
         statusSpan.innerHTML = "Drop <code>.pth</code> / <code>.pt</code> here or click to browse";
       } else {
-        statusSpan.textContent = "Drop .nii(.gz)";
+        statusSpan.textContent = "Drop .nii(.gz) (optional)";
       }
     }
   }
 
   function refreshRunButton() {
-    const hasAll =
-      state.weights &&
-      MODALITIES.every((m) => state[m] !== null);
-    runButton.disabled = !hasAll;
+    const hasWeights = state.weights !== null;
+    const hasAnyModality = MODALITIES.some((m) => state[m] !== null);
+    runButton.disabled = !(hasWeights && hasAnyModality);
   }
 
   function assignFile(slot, file) {
@@ -129,16 +128,28 @@
 
   function renderResult(payload) {
     resultSummary.innerHTML = "";
+    const submitted = (payload.submitted_modalities || []).join(", ") || "(none)";
+    const filled = (payload.filled_modalities || []).join(", ") || "(none)";
     const rows = [
       ["Architecture", payload.architecture],
       ["Device", payload.device],
       ["Threshold", payload.threshold],
       ["ROI size", payload.roi_size.join(" × ")],
+      ["Submitted modalities", submitted],
+      ["Auto-filled modalities", filled],
       ["Output file", payload.output_filename],
       ["Tumor core voxels", payload.label_counts.tc_voxels.toLocaleString()],
       ["Whole tumor voxels", payload.label_counts.wt_voxels.toLocaleString()],
       ["Enhancing voxels", payload.label_counts.et_voxels.toLocaleString()],
     ];
+
+    if (
+      payload.requested_architecture &&
+      payload.requested_architecture !== payload.architecture
+    ) {
+      rows.splice(1, 0, ["Requested architecture", payload.requested_architecture]);
+    }
+
     for (const [label, value] of rows) {
       const dt = document.createElement("dt");
       dt.textContent = label;
@@ -182,10 +193,11 @@
 
     const formData = new FormData();
     formData.append("weights", state.weights);
-    formData.append("flair", state.flair);
-    formData.append("t1", state.t1);
-    formData.append("t1ce", state.t1ce);
-    formData.append("t2", state.t2);
+    for (const modality of MODALITIES) {
+      if (state[modality]) {
+        formData.append(modality, state[modality]);
+      }
+    }
     formData.append("architecture", architectureSelect.value);
     formData.append("device", document.getElementById("device").value);
     formData.append("threshold", document.getElementById("threshold").value);

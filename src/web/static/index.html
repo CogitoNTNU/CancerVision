@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CancerVision — Drag &amp; Drop Inference</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1>CancerVision</h1>
+    </header>
+
+    <main class="container">
+      <section class="card">
+        <h2>1. Drop model weights</h2>
+        <p class="hint">
+          Accepts a PyTorch checkpoint (<code>.pth</code> or <code>.pt</code>). The
+          file may be a raw <code>state_dict</code> or a training checkpoint containing
+          a <code>model_state</code> key.
+        </p>
+        <div class="dropzone" data-slot="weights" data-accept=".pth,.pt">
+          <div class="dropzone-inner">
+            <strong>Weights</strong>
+            <span class="dz-status">Drop <code>.pth</code> / <code>.pt</code> here or click to browse</span>
+          </div>
+          <input type="file" accept=".pth,.pt" hidden />
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2. Drop one or more MRI modalities</h2>
+        <p class="hint">
+          NIfTI files (<code>.nii</code> or <code>.nii.gz</code>). Files whose names
+          include <code>flair</code>, <code>t1ce</code>, <code>t1</code>, or
+          <code>t2</code> are auto-assigned. You can upload a single modality or all
+          four. Missing channels are auto-filled using one uploaded modality.
+        </p>
+        <div class="modalities">
+          <div class="dropzone modality" data-slot="flair" data-modality="flair">
+            <div class="dropzone-inner">
+              <strong>FLAIR</strong>
+              <span class="dz-status">Drop .nii(.gz) (optional)</span>
+            </div>
+            <input type="file" accept=".nii,.nii.gz" hidden />
+          </div>
+          <div class="dropzone modality" data-slot="t1" data-modality="t1">
+            <div class="dropzone-inner">
+              <strong>T1</strong>
+              <span class="dz-status">Drop .nii(.gz) (optional)</span>
+            </div>
+            <input type="file" accept=".nii,.nii.gz" hidden />
+          </div>
+          <div class="dropzone modality" data-slot="t1ce" data-modality="t1ce">
+            <div class="dropzone-inner">
+              <strong>T1CE</strong>
+              <span class="dz-status">Drop .nii(.gz) (optional)</span>
+            </div>
+            <input type="file" accept=".nii,.nii.gz" hidden />
+          </div>
+          <div class="dropzone modality" data-slot="t2" data-modality="t2">
+            <div class="dropzone-inner">
+              <strong>T2</strong>
+              <span class="dz-status">Drop .nii(.gz) (optional)</span>
+            </div>
+            <input type="file" accept=".nii,.nii.gz" hidden />
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>3. Configure</h2>
+        <div class="config-grid">
+          <label>
+            Architecture
+            <select id="architecture"></select>
+          </label>
+          <label>
+            Device
+            <select id="device">
+              <option value="auto">auto</option>
+              <option value="cpu">cpu</option>
+              <option value="cuda">cuda</option>
+              <option value="mps">mps</option>
+            </select>
+          </label>
+          <label>
+            Threshold
+            <input id="threshold" type="number" step="0.05" min="0" max="1" value="0.5" />
+          </label>
+          <label>
+            ROI size
+            <input id="roi" type="text" value="128,128,128" />
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <button id="run-button" class="primary-button" disabled>
+          Run inference
+        </button>
+        <div id="status" class="status" hidden></div>
+        <div id="result" class="result" hidden>
+          <h3>Prediction</h3>
+          <dl id="result-summary"></dl>
+          <a id="download-link" class="download" href="#" download>
+            Download prediction (.nii.gz)
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

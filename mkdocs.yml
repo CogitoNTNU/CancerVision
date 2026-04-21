@@ -1,4 +1,4 @@
-site_name: PROJECT-TEMPLATE
+site_name: CancerVision
 
 theme:
   name: material
@@ -53,6 +53,10 @@ theme:
 
 nav:
   - Home: index.md
+  - Manuals:
+      - Inference Setup: manuals/inference-setup.md
+      - ML Lifecycle Setup: manuals/ml-lifecycle-setup.md
+      - Web Interface: manuals/web-interface.md
       
 plugins:
   - search

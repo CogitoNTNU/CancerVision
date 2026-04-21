@@ -78,18 +78,12 @@ if [ -f "${WORKDIR}/.env" ]; then
   set +a
 fi
 
-<<<<<<< HEAD
 export PYTHONPATH="${WORKDIR}:${PYTHONPATH:-}"
 
 echo "================================================"
 nvidia-smi
 echo "================================================"
-uv run python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'}')"
-=======
-# # Load required modules
-# module purge
-# module load Anaconda3/2024.02-1
->>>>>>> main
+uv run python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'CUDA Version: {torch.version.cuda}'); print(f'Device Count: {torch.cuda.device_count()}'); print(f'Device Name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
 
 uv run python main.py
 

@@ -18,8 +18,9 @@ dependencies = [
     "weave>=0.52.30",
     "python-dotenv>=1.1.1",
     "h5py>=3.16.0",
-    "pydicom>=3.0.1",
-    "pynrrd>=1.1.3",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    "python-multipart>=0.0.9",
 ]
 
 [tool.uv.sources]

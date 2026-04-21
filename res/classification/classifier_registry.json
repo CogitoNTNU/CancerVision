@@ -1,0 +1,13 @@
+{
+  "classifiers": [
+    {
+      "id": "brats_rule_based_v1",
+      "type": "rule_based",
+      "thresholds": {
+        "min_tumor_voxels": 16,
+        "enhancing_ratio_for_aggressive": 0.2,
+        "core_ratio_for_compact": 0.7
+      }
+    }
+  ]
+}

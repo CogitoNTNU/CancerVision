@@ -272,3 +272,4 @@ res/web_uploads/
 src/test.py
 
 wandb/*
+*/dataset-copy/*

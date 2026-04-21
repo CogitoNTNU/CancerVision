@@ -1,0 +1,67 @@
+_wandb:
+    value:
+        cli_version: 0.25.0
+        e:
+            4fl6f62nv94jt3e4ahqg92wg56g7m906:
+                codePath: main.py
+                codePathLocal: main.py
+                email: dev@cogito-ntnu.no
+                executable: C:\Users\Polar\Documents\GitHub\CancerVision\.venv\Scripts\python.exe
+                git:
+                    commit: 43c45f000b515ed69ef3a6f7923bab1ae4037ff1
+                    remote: https://github.com/CogitoNTNU/CancerVision.git
+                host: DESKTOP-0NVSU61
+                os: Windows-11-10.0.26200-SP0
+                program: C:\Users\Polar\Documents\GitHub\CancerVision\main.py
+                python: CPython 3.13.11
+                root: C:\Users\Polar\Documents\GitHub\CancerVision
+                startedAt: "2026-03-20T08:58:06.207282Z"
+                writerId: 4fl6f62nv94jt3e4ahqg92wg56g7m906
+        m: []
+        python_version: 3.13.11
+        t:
+            "1":
+                - 1
+                - 5
+                - 10
+                - 41
+                - 48
+                - 51
+                - 53
+            "2":
+                - 1
+                - 5
+                - 10
+                - 41
+                - 48
+                - 51
+                - 53
+            "3":
+                - 16
+            "4": 3.13.11
+            "5": 0.25.0
+            "8":
+                - 3
+            "12": 0.25.0
+            "13": windows-amd64
+batch_size:
+    value: 1
+lr:
+    value: 0.0001
+max_epochs:
+    value: 100
+num_samples:
+    value: 4
+roi_size:
+    value:
+        - 128
+        - 128
+        - 128
+seed:
+    value: 0
+test_size:
+    value: 0.2
+val_interval:
+    value: 1
+weight_decay:
+    value: 1e-05

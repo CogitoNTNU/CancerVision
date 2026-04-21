@@ -1,7 +1,7 @@
 # Dataset
 
 The BraTS 2020 dataset is not included here (license). Download it and place
-the training tree under `res/data/brats/MICCAI_BraTS2020_TrainingData/`
+the training tree under `res/data/brats/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/`
 (that path is the default for `--data-dir` in the training CLI).
 
 # Models and inference outputs

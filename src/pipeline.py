@@ -15,7 +15,7 @@ Lambda, Slurm worker) rather than crashing mid-epoch with a cryptic error.
 Usage
 -----
     python -m src.pipeline --model dynunet \
-        --data-dir res/data/brats/MICCAI_BraTS2020_TrainingData \
+        --data-dir res/data/brats/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData \
         --max-epochs 100
 
 Forwards every flag accepted by `src.training.train` plus:
@@ -178,7 +178,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     data_dir = Path(
         _extract_flag_value(train_argv, "--data-dir", os.environ.get("DATA_DIR", ""))
-        or "res/data/brats/MICCAI_BraTS2020_TrainingData"
+        or "res/data/brats/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData"
     ).resolve()
     wandb_mode = _extract_flag_value(train_argv, "--wandb-mode", "online")
 

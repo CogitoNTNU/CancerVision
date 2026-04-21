@@ -12,7 +12,7 @@
 # Env vars (either exported or set in .env):
 #   WANDB_API_KEY     required for --wandb-mode=online (omit for offline)
 #   WANDB_ENTITY      optional (defaults to "cancervision")
-#   DATA_DIR          BraTS root; default res/data/brats/MICCAI_BraTS2020_TrainingData
+#   DATA_DIR          BraTS root; default res/data/brats/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData
 #   DATA_ARCHIVE      optional path or URL to a BraTS archive to extract on first run
 
 set -euo pipefail
@@ -27,7 +27,7 @@ if [ -f "${WORKDIR}/.env" ]; then
   set +a
 fi
 
-: "${DATA_DIR:=${WORKDIR}/res/data/brats/MICCAI_BraTS2020_TrainingData}"
+: "${DATA_DIR:=${WORKDIR}/res/data/brats/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData}"
 : "${WANDB_MODE:=online}"
 export DATA_DIR WANDB_MODE
 

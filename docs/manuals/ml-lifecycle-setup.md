@@ -40,7 +40,7 @@ registry in `src.models.registry`:
 
 ```bash
 uv run python -m src.training.train --model dynunet \
-    --data-dir res/data/brats/MICCAI_BraTS2020_TrainingData \
+    --data-dir res/data/brats/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData \
     --max-epochs 100
 ```
 

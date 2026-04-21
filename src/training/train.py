@@ -63,7 +63,12 @@ from src.training.distributed import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_DIR = (
-    REPO_ROOT / "res" / "data" / "brats" / "MICCAI_BraTS2020_TrainingData"
+    REPO_ROOT
+    / "res"
+    / "data"
+    / "brats"
+    / "BraTS2020_TrainingData"
+    / "MICCAI_BraTS2020_TrainingData"
 )
 DEFAULT_SAVE_DIR = REPO_ROOT / "res" / "models"
 WANDB_PROJECT = "cancervision"

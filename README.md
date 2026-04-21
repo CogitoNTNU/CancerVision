@@ -98,7 +98,7 @@ The project solves two tasks on BraTS 2020 MRI volumes:
    mask into a binary `tumor` / `no_tumor` label plus a coarse phenotype.
 
 Unpack the BraTS training release under
-`res/data/brats/MICCAI_BraTS2020_TrainingData/` (the default `--data-dir`).
+`res/data/brats/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/` (the default `--data-dir`).
 
 ### Full pipeline on a vast.ai (or any CUDA) instance
 

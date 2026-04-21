@@ -74,5 +74,5 @@ srun --ntasks="${GPU_COUNT}" --ntasks-per-node="${GPU_COUNT}" --gpus-per-task=1 
   --roi-size 128 128 128 \
   --wandb-mode "${WANDB_MODE_CLEAN}" \
   --run-name "dynunet-brats-${SLURM_JOB_ID:-local}" \
-  --data-dir "${DATA_DIR:-${WORKDIR}/res/data/brats/MICCAI_BraTS2020_TrainingData}"
+  --data-dir "${DATA_DIR:-${WORKDIR}/res/data/brats/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData}"
 

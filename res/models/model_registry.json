@@ -1,0 +1,30 @@
+{
+  "models": [
+    {
+      "id": "dynunet_latest",
+      "architecture": "dynunet_brats_v1",
+      "checkpoint": "res/models/best_metric_model.pth",
+      "in_channels": 4,
+      "out_channels": 3,
+      "roi_size": [128, 128, 128],
+      "sw_batch_size": 4,
+      "overlap": 0.5,
+      "threshold": 0.5,
+      "input_modalities": ["flair", "t1", "t1ce", "t2"],
+      "output_labels": ["tc", "wt", "et"]
+    },
+    {
+      "id": "dynunet_run_24271300",
+      "architecture": "dynunet_brats_v1",
+      "checkpoint": "res/models/dynetrun_model/dynunet-brats-24271300/best_metric_model.pth",
+      "in_channels": 4,
+      "out_channels": 3,
+      "roi_size": [128, 128, 128],
+      "sw_batch_size": 4,
+      "overlap": 0.5,
+      "threshold": 0.5,
+      "input_modalities": ["flair", "t1", "t1ce", "t2"],
+      "output_labels": ["tc", "wt", "et"]
+    }
+  ]
+}

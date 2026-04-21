@@ -1,4 +1,4 @@
-from src.models import dynnet
+from src.training import train
 
 if __name__ == "__main__":
-    dynnet.main()
+    train.main()

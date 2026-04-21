@@ -45,7 +45,7 @@ For example: OS version, programs, libraries, etc.
 -->
 
 - **Git**: Ensure that git is installed on your machine. [Download Git](https://git-scm.com/downloads)
-- **Python 3.12**: Required for the project. [Download Python](https://www.python.org/downloads/)
+- **Python 3.13**: Required for the project. [Download Python](https://www.python.org/downloads/)
 - **UV**: Used for managing Python environments. [Install UV](https://docs.astral.sh/uv/getting-started/installation/)
 - **Docker** (optional): For DevContainer development. [Download Docker](https://www.docker.com/products/docker-desktop)
 
@@ -92,10 +92,59 @@ For example: OS version, programs, libraries, etc.
 To run the project, run the following command from the root directory of the project:
 
 ```bash
-
+uv run python -m src.training.train --experiment-id dynunet_brats_baseline
 ```
 
-<!-- TODO: Instructions on how to run the project and use its features. -->
+Preview a resolved training setup without running it:
+
+```bash
+uv run python -m src.training.train --experiment-id dynunet_brats_baseline --dry-run
+```
+
+Run single-case inference with the registry-backed CLI:
+
+```bash
+uv run python -m src.inference.inference \
+  --model-id dynunet_latest \
+  --case-dir /path/to/BraTS20_Training_001
+```
+
+Run inference for all case folders in a directory:
+
+```bash
+uv run python -m src.inference.inference \
+  --model-id dynunet_latest \
+  --input-root /path/to/MICCAI_BraTS2020_TrainingData \
+  --output-root res/predictions/dynunet_latest
+```
+
+### Model Registry
+
+Deployable model definitions live in `res/models/model_registry.json`.
+Each entry maps a model id to architecture and checkpoint metadata so inference does not depend on hardcoded paths.
+
+### Web interface (drag-and-drop inference)
+
+Serve a browser-based inference UI that accepts arbitrary model weights and
+the four BraTS MRI modalities via drag-and-drop:
+
+```bash
+uv run python -m src.web --host 127.0.0.1 --port 8080
+```
+
+See `docs/manuals/web-interface.md` for details.
+
+### Classification
+
+Classify predicted segmentations into case-level tumor categories:
+
+```bash
+uv run python -m src.classification.classify \
+  --classifier-id brats_rule_based_v1 \
+  --input-root res/predictions/dynunet_latest
+```
+
+Classifier definitions live in `res/classification/classifier_registry.json`.
 
 ### Generate Documentation Site
 

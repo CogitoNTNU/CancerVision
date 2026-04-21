@@ -258,7 +258,15 @@ Thumbs.db
 
 # Training dataset
 res/dataset/*
+
+# Inference outputs
+res/predictions/
+res/classification/reports/
+res/classification/models/
 res/data/*
+
+# Web interface upload/scratch directory
+res/web_uploads/
 
 # Testing
 src/test.py

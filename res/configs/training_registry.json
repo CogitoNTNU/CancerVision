@@ -1,0 +1,17 @@
+{
+  "experiments": [
+    {
+      "id": "dynunet_brats_baseline",
+      "trainer_module": "src.models.dynnet",
+      "arguments": {
+        "run-name": "dynunet-brats-baseline",
+        "wandb-mode": "offline",
+        "max-epochs": 100,
+        "batch-size": 1,
+        "num-workers": 4,
+        "roi-size": [128, 128, 128],
+        "num-samples": 4
+      }
+    }
+  ]
+}

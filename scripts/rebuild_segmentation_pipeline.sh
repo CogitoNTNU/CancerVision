@@ -4,7 +4,7 @@ set -euo pipefail
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${WORKDIR}"
 
-STANDARDIZED_ROOT="${STANDARDIZED_ROOT:-Z:\dataset\cancervision-standardized}"
+STANDARDIZED_ROOT="${STANDARDIZED_ROOT:-${WORKDIR}/res/dataset/cancervision-standardized}"
 MANIFEST_DIR="${MANIFEST_DIR:-${STANDARDIZED_ROOT}/manifests}"
 TASK_DIR="${TASK_DIR:-${STANDARDIZED_ROOT}/task_manifests}"
 SEG_NATIVE_DIR="${SEG_NATIVE_DIR:-${STANDARDIZED_ROOT}/segmentation_native}"
@@ -100,6 +100,11 @@ run_build() {
   local output_csv="$3"
   shift 3
 
+  if [[ "${FORCE_REBUILD}" != "1" && -f "$(to_shell_path "${output_csv}")" ]]; then
+    echo "reuse ${name}: ${output_csv}"
+    BUILT_MANIFESTS+=("${output_csv}")
+    return
+  fi
   if [[ -z "${root_path}" ]]; then
     echo "skip ${name}: root empty"
     return
@@ -108,11 +113,6 @@ run_build() {
   root_shell="$(to_shell_path "${root_path}")"
   if [[ ! -e "${root_shell}" ]]; then
     echo "skip ${name}: root missing -> ${root_path}"
-    return
-  fi
-  if [[ "${FORCE_REBUILD}" != "1" && -f "$(to_shell_path "${output_csv}")" ]]; then
-    echo "reuse ${name}: ${output_csv}"
-    BUILT_MANIFESTS+=("${output_csv}")
     return
   fi
 

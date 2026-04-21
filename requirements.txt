@@ -116,7 +116,7 @@ networkx==3.6.1
     # via
     #   polyfile-weave
     #   torch
-nibabel==5.4.0
+nibabel==5.4.2
     # via cancervision
 numpy==2.4.2
     # via

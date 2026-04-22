@@ -58,6 +58,9 @@ fi
 echo "== syncing python environment =="
 uv sync --frozen
 
+ulimit -n 1048576 || ulimit -n 65536 || true
+echo "ulimit -n : $(ulimit -n)"
+
 echo "== GPU visibility =="
 nvidia-smi
 

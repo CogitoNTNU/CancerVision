@@ -33,7 +33,13 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import torch
+import torch.multiprocessing as torch_mp
 from dotenv import load_dotenv
+
+try:
+    torch_mp.set_sharing_strategy("file_system")
+except RuntimeError:
+    pass
 from monai.config import print_config
 from monai.data import DataLoader, Dataset, decollate_batch, list_data_collate
 from monai.inferers import sliding_window_inference

@@ -19,6 +19,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <ATen/Dispatch.h>
+#include <c10/cuda/CUDAException.h>
 
 #define BLOCK_SIZE 256
 
@@ -141,7 +142,7 @@ void fused_dice_forward_cuda(
                 n_per_row
             );
         });
-    AT_CUDA_CHECK(cudaGetLastError());
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
 void fused_dice_backward_cuda(
@@ -177,5 +178,5 @@ void fused_dice_backward_cuda(
                 scale
             );
         });
-    AT_CUDA_CHECK(cudaGetLastError());
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
 }

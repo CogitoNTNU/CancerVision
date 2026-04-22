@@ -457,7 +457,7 @@ def _train_one_epoch(
                 optimizer.step()
 
         epoch_loss += step_loss
-        if context.is_main and (step % 10 == 0 or step <= 3):
+        if context.is_main:
             print(
                 f"  step {step}/{len(loader)}  train_loss: {step_loss:.4f}"
                 f"  step_time: {time.time() - step_start:.2f}s",

@@ -19,17 +19,18 @@
 #   * CUDA_LAUNCH_BLOCKING=1 so errors point at the right line
 #
 # Usage:
-#   bash scripts/run_2xa100.sh                    # full 300-epoch run
-#   bash scripts/run_2xa100.sh --max-epochs 50    # shorter
+#   bash scripts/run_2xa100.sh                    # 80-epoch run (~6h on 1xA100)
+#   bash scripts/run_2xa100.sh --max-epochs 300   # longer
 #
 # Env overrides:
 #   WANDB_API_KEY   required for online logging
 #   DATA_DIR        BraTS root
-#   MAX_EPOCHS      300
+#   MAX_EPOCHS      80
 #   ROI_SIZE        "128 128 128"
 #   NUM_SAMPLES     4
 #   NUM_WORKERS     2
-#   VAL_INTERVAL    10
+#   VAL_INTERVAL    5
+#   LR              2e-4
 
 set -euo pipefail
 
@@ -45,14 +46,14 @@ fi
 
 : "${DATA_DIR:=${WORKDIR}/res/data/brats/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData}"
 : "${WANDB_MODE:=online}"
-: "${MAX_EPOCHS:=300}"
+: "${MAX_EPOCHS:=80}"
 : "${ROI_SIZE:=128 128 128}"
 : "${NUM_SAMPLES:=4}"
 : "${BATCH_SIZE:=1}"
 : "${NUM_WORKERS:=2}"
 : "${VAL_SW_BATCH:=4}"
-: "${VAL_INTERVAL:=10}"
-: "${LR:=1e-4}"
+: "${VAL_INTERVAL:=5}"
+: "${LR:=2e-4}"
 export DATA_DIR WANDB_MODE
 
 RUN_NAME="${RUN_NAME:-dynunet-$(date -u +%Y%m%d-%H%M%S)}"

@@ -108,6 +108,78 @@
           </a>
         </div>
       </section>
+
+      <section id="viewer" class="card viewer" hidden>
+        <h2>4. Segmentation viewer</h2>
+        <p class="hint">
+          Raw MRI on the left, model overlay on the right. Drag the slider to
+          scrub through the volume.
+        </p>
+        <div class="viewer-toolbar">
+          <label>
+            Modality
+            <select id="viewer-modality"></select>
+          </label>
+          <div class="legend">
+            <span class="chip chip-tc">Tumor core</span>
+            <span class="chip chip-wt">Edema / WT halo</span>
+            <span class="chip chip-et">Enhancing tumor</span>
+          </div>
+        </div>
+        <div class="viewer-grid">
+          <figure class="pane" data-plane="axial">
+            <figcaption>Axial</figcaption>
+            <div class="pane-images">
+              <div class="pane-col">
+                <img class="pane-img raw" data-plane="axial" data-overlay="false" alt="axial raw" />
+                <span class="pane-col-label">Raw</span>
+              </div>
+              <div class="pane-col">
+                <img class="pane-img overlay" data-plane="axial" data-overlay="true" alt="axial overlay" />
+                <span class="pane-col-label">Segmentation</span>
+              </div>
+            </div>
+            <div class="slider-row">
+              <input type="range" class="slice-slider" data-plane="axial" min="0" max="0" value="0" />
+              <span class="slice-label" data-plane="axial">0 / 0</span>
+            </div>
+          </figure>
+          <figure class="pane" data-plane="coronal">
+            <figcaption>Coronal</figcaption>
+            <div class="pane-images">
+              <div class="pane-col">
+                <img class="pane-img raw" data-plane="coronal" data-overlay="false" alt="coronal raw" />
+                <span class="pane-col-label">Raw</span>
+              </div>
+              <div class="pane-col">
+                <img class="pane-img overlay" data-plane="coronal" data-overlay="true" alt="coronal overlay" />
+                <span class="pane-col-label">Segmentation</span>
+              </div>
+            </div>
+            <div class="slider-row">
+              <input type="range" class="slice-slider" data-plane="coronal" min="0" max="0" value="0" />
+              <span class="slice-label" data-plane="coronal">0 / 0</span>
+            </div>
+          </figure>
+          <figure class="pane" data-plane="sagittal">
+            <figcaption>Sagittal</figcaption>
+            <div class="pane-images">
+              <div class="pane-col">
+                <img class="pane-img raw" data-plane="sagittal" data-overlay="false" alt="sagittal raw" />
+                <span class="pane-col-label">Raw</span>
+              </div>
+              <div class="pane-col">
+                <img class="pane-img overlay" data-plane="sagittal" data-overlay="true" alt="sagittal overlay" />
+                <span class="pane-col-label">Segmentation</span>
+              </div>
+            </div>
+            <div class="slider-row">
+              <input type="range" class="slice-slider" data-plane="sagittal" min="0" max="0" value="0" />
+              <span class="slice-label" data-plane="sagittal">0 / 0</span>
+            </div>
+          </figure>
+        </div>
+      </section>
     </main>
 
     <script src="/static/app.js"></script>

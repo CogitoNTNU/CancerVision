@@ -1,21 +1,28 @@
 from __future__ import annotations
 
 import argparse
+import io
 import shutil
 import tempfile
 import uuid
 from pathlib import Path
 from typing import Sequence
 
-import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+import matplotlib
 
-from src.inference.architectures import _ARCHITECTURE_BUILDERS
-from src.inference.model_registry import resolve_repo_root
+matplotlib.use("Agg")
+import matplotlib.image as mpimg  # noqa: E402  (must follow matplotlib.use)
+import nibabel as nib  # noqa: E402
+import numpy as np  # noqa: E402
+import uvicorn  # noqa: E402
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile  # noqa: E402
+from fastapi.responses import FileResponse, JSONResponse, Response  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
 
-from .inference_runtime import (
+from src.inference.architectures import list_architectures  # noqa: E402
+from src.inference.model_registry import resolve_repo_root  # noqa: E402
+
+from .inference_runtime import (  # noqa: E402
     build_model_from_weights,
     infer_from_files,
     resolve_device,
@@ -28,6 +35,106 @@ REPO_ROOT = resolve_repo_root(PACKAGE_DIR)
 WORK_ROOT = REPO_ROOT / "res" / "web_uploads"
 
 MODALITY_ORDER = ("flair", "t1", "t1ce", "t2")
+VALID_PLANES = ("axial", "coronal", "sagittal")
+
+# BraTS label -> (RGB in 0..1, alpha). Keep in sync with static/app.js legend.
+_LABEL_OVERLAY = {
+    1: ((1.0, 0.10, 0.10), 0.50),  # tumor core
+    2: ((1.0, 0.82, 0.10), 0.35),  # edema / whole-tumor halo
+    4: ((0.15, 0.55, 1.0), 0.60),  # enhancing tumor
+}
+
+# Per-job volume cache so slider scrubs don't re-read NIfTI from disk every frame.
+# Keyed by job_id; simple FIFO eviction at _VOLUME_CACHE_MAX entries.
+_VOLUME_CACHE: dict[str, dict] = {}
+_VOLUME_CACHE_MAX = 4
+
+
+def _load_job_volumes(job_id: str) -> dict:
+    """Load modality + prediction volumes for a job; cache in memory."""
+    cached = _VOLUME_CACHE.get(job_id)
+    if cached is not None:
+        return cached
+
+    job_dir = WORK_ROOT / job_id
+    if not job_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    modalities: dict[str, np.ndarray] = {}
+    for modality in MODALITY_ORDER:
+        for ext in (".nii.gz", ".nii"):
+            candidate = job_dir / f"case_{modality}{ext}"
+            if candidate.exists():
+                modalities[modality] = np.asarray(
+                    nib.load(str(candidate)).get_fdata(dtype=np.float32)
+                )
+                break
+    if not modalities:
+        raise HTTPException(status_code=404, detail="No modality volumes on disk")
+
+    predictions = sorted(job_dir.glob("prediction_*.nii.gz"))
+    if not predictions:
+        raise HTTPException(status_code=404, detail="Prediction not available")
+    prediction = np.asarray(nib.load(str(predictions[0])).get_fdata()).astype(np.int16)
+
+    # Fill any missing modalities from the first available so the UI can still render
+    # a pane even if the user only uploaded one channel.
+    fallback = next(iter(modalities.values()))
+    for modality in MODALITY_ORDER:
+        modalities.setdefault(modality, fallback)
+
+    entry = {
+        "modalities": modalities,
+        "prediction": prediction,
+        "shape": tuple(int(v) for v in prediction.shape),
+    }
+    _VOLUME_CACHE[job_id] = entry
+    while len(_VOLUME_CACHE) > _VOLUME_CACHE_MAX:
+        _VOLUME_CACHE.pop(next(iter(_VOLUME_CACHE)))
+    return entry
+
+
+def _extract_slice(volume: np.ndarray, plane: str, idx: int) -> np.ndarray:
+    shape = volume.shape  # (X, Y, Z)
+    if plane == "axial":
+        idx = max(0, min(idx, shape[2] - 1))
+        plane_slice = volume[:, :, idx]
+    elif plane == "coronal":
+        idx = max(0, min(idx, shape[1] - 1))
+        plane_slice = volume[:, idx, :]
+    elif plane == "sagittal":
+        idx = max(0, min(idx, shape[0] - 1))
+        plane_slice = volume[idx, :, :]
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown plane: {plane}")
+    # Rotate so anatomical superior is up in the rendered image.
+    return np.rot90(plane_slice)
+
+
+def _render_slice_png(
+    modality_slice: np.ndarray,
+    label_slice: np.ndarray | None,
+) -> bytes:
+    """Blend a grayscale MRI slice with an optional colored label overlay."""
+    finite = modality_slice[np.isfinite(modality_slice)]
+    vmax = float(np.percentile(finite, 99.5)) if finite.size else 1.0
+    if vmax <= 0.0:
+        vmax = 1.0
+    gray = np.clip(modality_slice / vmax, 0.0, 1.0)
+    rgb = np.stack([gray, gray, gray], axis=-1).astype(np.float32)
+
+    if label_slice is not None:
+        for label_value, (color, alpha) in _LABEL_OVERLAY.items():
+            mask = label_slice == label_value
+            if not mask.any():
+                continue
+            color_arr = np.asarray(color, dtype=np.float32)
+            rgb[mask] = rgb[mask] * (1.0 - alpha) + color_arr * alpha
+
+    rgb_u8 = (np.clip(rgb, 0.0, 1.0) * 255.0).astype(np.uint8)
+    buf = io.BytesIO()
+    mpimg.imsave(buf, rgb_u8, format="png")
+    return buf.getvalue()
 
 
 def create_app() -> FastAPI:
@@ -52,8 +159,8 @@ def create_app() -> FastAPI:
         return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/api/architectures")
-    def list_architectures() -> JSONResponse:
-        return JSONResponse({"architectures": sorted(_ARCHITECTURE_BUILDERS.keys())})
+    def architectures_endpoint() -> JSONResponse:
+        return JSONResponse({"architectures": list_architectures()})
 
     @app.post("/api/infer")
     async def run_inference(
@@ -67,12 +174,13 @@ def create_app() -> FastAPI:
         threshold: float = Form(0.5),
         roi_size: str = Form("128,128,128"),
     ) -> JSONResponse:
-        if architecture not in _ARCHITECTURE_BUILDERS:
+        registered = list_architectures()
+        if architecture not in registered:
             raise HTTPException(
                 status_code=400,
                 detail=(
                     f"Unknown architecture '{architecture}'. "
-                    f"Registered: {sorted(_ARCHITECTURE_BUILDERS.keys())}"
+                    f"Registered: {registered}"
                 ),
             )
 
@@ -187,6 +295,52 @@ def create_app() -> FastAPI:
             prediction,
             media_type="application/gzip",
             filename=prediction.name,
+        )
+
+    @app.get("/api/render/{job_id}/meta")
+    def render_meta(job_id: str) -> JSONResponse:
+        entry = _load_job_volumes(job_id)
+        x, y, z = entry["shape"]
+        return JSONResponse(
+            {
+                "shape": [x, y, z],
+                "modalities": list(entry["modalities"].keys()),
+                "planes": {
+                    "axial": {"size": z, "default": z // 2},
+                    "coronal": {"size": y, "default": y // 2},
+                    "sagittal": {"size": x, "default": x // 2},
+                },
+                "labels": [
+                    {"value": 1, "name": "Tumor core", "color": "#ff1a1a"},
+                    {"value": 2, "name": "Edema / WT halo", "color": "#ffd11a"},
+                    {"value": 4, "name": "Enhancing tumor", "color": "#268cff"},
+                ],
+            }
+        )
+
+    @app.get("/api/render/{job_id}/{plane}/{idx}.png")
+    def render_slice(
+        job_id: str,
+        plane: str,
+        idx: int,
+        modality: str = "flair",
+        overlay: bool = True,
+    ) -> Response:
+        if plane not in VALID_PLANES:
+            raise HTTPException(status_code=400, detail=f"Unknown plane: {plane}")
+        entry = _load_job_volumes(job_id)
+        modalities = entry["modalities"]
+        chosen = modality if modality in modalities else next(iter(modalities))
+
+        modality_slice = _extract_slice(modalities[chosen], plane, idx)
+        label_slice = (
+            _extract_slice(entry["prediction"], plane, idx) if overlay else None
+        )
+        png = _render_slice_png(modality_slice, label_slice)
+        return Response(
+            content=png,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=3600"},
         )
 
     return app

@@ -14,6 +14,16 @@
   const resultSummary = document.getElementById("result-summary");
   const downloadLink = document.getElementById("download-link");
   const architectureSelect = document.getElementById("architecture");
+  const viewerEl = document.getElementById("viewer");
+  const viewerModalitySelect = document.getElementById("viewer-modality");
+
+  const PLANES = ["axial", "coronal", "sagittal"];
+  const viewerState = {
+    jobId: null,
+    modality: "flair",
+    slices: { axial: 0, coronal: 0, sagittal: 0 },
+    sizes: { axial: 0, coronal: 0, sagittal: 0 },
+  };
 
   function detectModality(filename) {
     const lower = filename.toLowerCase();
@@ -161,6 +171,91 @@
     downloadLink.href = payload.download_url;
     downloadLink.setAttribute("download", payload.output_filename);
     resultEl.hidden = false;
+    initViewer(payload.job_id).catch((err) => {
+      setStatus(`Viewer init failed: ${err.message}`, "error");
+    });
+  }
+
+  function sliceUrl(plane, idx, overlay) {
+    const mod = encodeURIComponent(viewerState.modality);
+    const ov = overlay ? "true" : "false";
+    return `/api/render/${viewerState.jobId}/${plane}/${idx}.png?modality=${mod}&overlay=${ov}`;
+  }
+
+  function refreshPaneImages(plane) {
+    const idx = viewerState.slices[plane];
+    const size = viewerState.sizes[plane];
+    const label = document.querySelector(`.slice-label[data-plane="${plane}"]`);
+    if (label) label.textContent = `${idx + 1} / ${size}`;
+    document
+      .querySelectorAll(`img.pane-img[data-plane="${plane}"]`)
+      .forEach((img) => {
+        const overlay = img.dataset.overlay === "true";
+        img.src = sliceUrl(plane, idx, overlay);
+      });
+  }
+
+  function refreshAllPanes() {
+    for (const plane of PLANES) refreshPaneImages(plane);
+  }
+
+  async function initViewer(jobId) {
+    if (!jobId) return;
+    viewerState.jobId = jobId;
+
+    const response = await fetch(`/api/render/${jobId}/meta`);
+    if (!response.ok) {
+      throw new Error(`meta ${response.status}`);
+    }
+    const meta = await response.json();
+
+    // Populate modality dropdown from what was actually saved for this job.
+    viewerModalitySelect.innerHTML = "";
+    for (const mod of meta.modalities) {
+      const option = document.createElement("option");
+      option.value = mod;
+      option.textContent = mod.toUpperCase();
+      viewerModalitySelect.appendChild(option);
+    }
+    const preferred = meta.modalities.includes("flair")
+      ? "flair"
+      : meta.modalities[0];
+    viewerModalitySelect.value = preferred;
+    viewerState.modality = preferred;
+
+    for (const plane of PLANES) {
+      const { size, default: def } = meta.planes[plane];
+      viewerState.sizes[plane] = size;
+      viewerState.slices[plane] = def;
+      const slider = document.querySelector(
+        `.slice-slider[data-plane="${plane}"]`,
+      );
+      if (slider) {
+        slider.min = "0";
+        slider.max = String(Math.max(0, size - 1));
+        slider.value = String(def);
+      }
+    }
+
+    viewerEl.hidden = false;
+    refreshAllPanes();
+  }
+
+  function initViewerControls() {
+    document.querySelectorAll(".slice-slider").forEach((slider) => {
+      slider.addEventListener("input", (event) => {
+        const plane = slider.dataset.plane;
+        const idx = parseInt(event.target.value, 10);
+        if (Number.isFinite(idx)) {
+          viewerState.slices[plane] = idx;
+          refreshPaneImages(plane);
+        }
+      });
+    });
+    viewerModalitySelect.addEventListener("change", (event) => {
+      viewerState.modality = event.target.value;
+      refreshAllPanes();
+    });
   }
 
   async function loadArchitectures() {
@@ -222,6 +317,7 @@
   }
 
   initDropzones();
+  initViewerControls();
   loadArchitectures();
   runButton.addEventListener("click", runInference);
 })();

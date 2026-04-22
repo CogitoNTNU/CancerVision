@@ -141,7 +141,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--fused-optimizer", action=argparse.BooleanOptionalAction, default=False,
-        help="Use torch.optim.Adam(fused=True) (CUDA fused kernel).",
+        help="Use torch.optim.AdamW(fused=True) (CUDA fused kernel).",
     )
     parser.add_argument(
         "--fused-dice-loss", action=argparse.BooleanOptionalAction, default=False,
@@ -570,7 +570,7 @@ def _build_optimizer(
     args: argparse.Namespace, model: torch.nn.Module, context: RuntimeContext
 ) -> torch.optim.Optimizer:
     fused = bool(args.fused_optimizer and context.device.type == "cuda")
-    return torch.optim.Adam(
+    return torch.optim.AdamW(
         model.parameters(),
         lr=args.lr,
         weight_decay=args.weight_decay,

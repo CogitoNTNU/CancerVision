@@ -122,6 +122,27 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Enable CUDA autocast + GradScaler (ignored off-CUDA).",
     )
     parser.add_argument(
+        "--deep-supervision",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Train with nnU-Net-style deep supervision (DynUNet only).",
+    )
+    parser.add_argument(
+        "--deep-supr-num",
+        type=int,
+        default=2,
+        help="Number of extra supervision heads when --deep-supervision is set.",
+    )
+    parser.add_argument(
+        "--deterministic",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "If set, force deterministic cuDNN kernels (slower). Otherwise enables "
+            "cudnn.benchmark for fastest convolutions on fixed input shapes."
+        ),
+    )
+    parser.add_argument(
         "--wandb-mode",
         choices=("online", "offline", "disabled"),
         default="online",
@@ -138,6 +159,35 @@ def _autocast(context: RuntimeContext, enabled: bool) -> contextlib.AbstractCont
     if enabled and context.device.type == "cuda":
         return torch.autocast(device_type="cuda", dtype=torch.float16)
     return contextlib.nullcontext()
+
+
+def _deep_supervision_loss(
+    outputs: torch.Tensor,
+    labels: torch.Tensor,
+    loss_fn: DiceLoss,
+) -> torch.Tensor:
+    """Weighted multi-scale Dice loss matching nnU-Net's deep-supervision recipe.
+
+    DynUNet stacks supervision heads on axis 1 when `deep_supervision=True`.
+    Weights decay by 0.5 per level and are renormalised so they sum to 1;
+    labels are trilinearly downsampled to match each head's spatial shape.
+    """
+    num_heads = outputs.shape[1]
+    weights = [0.5 ** i for i in range(num_heads)]
+    total = sum(weights)
+    weights = [w / total for w in weights]
+
+    loss = outputs.new_zeros(())
+    for i, weight in enumerate(weights):
+        head = outputs[:, i]
+        if head.shape[2:] == labels.shape[2:]:
+            target = labels
+        else:
+            target = torch.nn.functional.interpolate(
+                labels, size=head.shape[2:], mode="nearest"
+            )
+        loss = loss + weight * loss_fn(head, target)
+    return loss
 
 
 def _micro_batch_slices(total: int, micro: int) -> list[slice]:
@@ -274,7 +324,10 @@ def _train_one_epoch(
             weight = micro_inputs.shape[0] / inputs.shape[0]
             with _autocast(context, _use_amp(args, context)):
                 outputs = model(micro_inputs)
-                loss = loss_fn(outputs, micro_labels)
+                if args.deep_supervision and outputs.dim() == 6:
+                    loss = _deep_supervision_loss(outputs, micro_labels, loss_fn)
+                else:
+                    loss = loss_fn(outputs, micro_labels)
                 scaled = loss * weight
             step_loss += loss.item() * weight
             if scaler is not None:
@@ -364,7 +417,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     try:
         if context.is_main:
             print_config()
-        set_determinism(seed=args.seed)
+        if args.deterministic:
+            set_determinism(seed=args.seed)
+        else:
+            torch.manual_seed(args.seed)
+            torch.backends.cudnn.benchmark = True
+            torch.backends.cudnn.deterministic = False
 
         rank0_print(context, f"Model          : {args.model}")
         rank0_print(context, f"Device         : {context.device}")
@@ -377,7 +435,20 @@ def main(argv: Sequence[str] | None = None) -> None:
 
         train_loader, val_loader, sampler = _build_loaders(args, context)
 
-        model = build_model(args.model).to(context.device)
+        model_kwargs: dict[str, Any] = {}
+        if args.model == "dynunet" and args.deep_supervision:
+            model_kwargs = {
+                "deep_supervision": True,
+                "deep_supr_num": args.deep_supr_num,
+            }
+        elif args.deep_supervision:
+            rank0_print(
+                context,
+                f"WARNING: --deep-supervision requested but model '{args.model}' "
+                "does not support it; ignoring.",
+            )
+            args.deep_supervision = False
+        model = build_model(args.model, **model_kwargs).to(context.device)
         if context.distributed:
             assert context.device_index is not None
             model = DistributedDataParallel(

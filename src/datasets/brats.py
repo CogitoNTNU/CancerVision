@@ -27,8 +27,11 @@ from monai.transforms import (
     LoadImaged,
     MapTransform,
     NormalizeIntensityd,
+    RandAdjustContrastd,
     RandCropByPosNegLabeld,
     RandFlipd,
+    RandGaussianNoised,
+    RandGaussianSmoothd,
     RandScaleIntensityd,
     RandShiftIntensityd,
 )
@@ -99,6 +102,7 @@ def build_brats_data_dicts(data_dir: str | Path) -> list[dict[str, list[str] | s
 
 
 def get_train_transforms(roi_size: Sequence[int], num_samples: int) -> Compose:
+    """Training pipeline with nnU-Net-style augmentations for BraTS."""
     return Compose(
         [
             LoadImaged(keys=["image", "label"]),
@@ -118,8 +122,17 @@ def get_train_transforms(roi_size: Sequence[int], num_samples: int) -> Compose:
             RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
             RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
             RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),
-            RandScaleIntensityd(keys="image", factors=0.1, prob=1.0),
-            RandShiftIntensityd(keys="image", offsets=0.1, prob=1.0),
+            RandGaussianNoised(keys="image", prob=0.15, mean=0.0, std=0.1),
+            RandGaussianSmoothd(
+                keys="image",
+                prob=0.15,
+                sigma_x=(0.5, 1.5),
+                sigma_y=(0.5, 1.5),
+                sigma_z=(0.5, 1.5),
+            ),
+            RandScaleIntensityd(keys="image", factors=0.25, prob=0.3),
+            RandShiftIntensityd(keys="image", offsets=0.1, prob=0.3),
+            RandAdjustContrastd(keys="image", prob=0.15, gamma=(0.7, 1.5)),
         ]
     )
 

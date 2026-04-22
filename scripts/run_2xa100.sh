@@ -1,23 +1,32 @@
 #!/usr/bin/env bash
-# Max-performance BraTS DynUNet (nnU-Net) training on 2x A100 SXM 80GB.
+# BraTS DynUNet training on 2x A100 SXM — conservative, known-working stack.
 #
-# Stack (in the order it helps):
-#   * DDP across both GPUs via torchrun (NVLink P2P through NCCL)
-#   * CacheDataset  : deterministic transforms cached in RAM, only crops/flips rerun
-#   * BF16 autocast : no GradScaler, full dynamic range (A100/H100 sweet spot)
-#   * channels_last_3d memory format (faster 3D convs on A100 Tensor Cores)
-#   * torch.compile(mode="default") : kernel fusion after fixed ROI shapes
-#   * fused Adam (torch.optim.Adam(fused=True))
-#   * custom fused Dice CUDA kernel (src/kernels/fused_dice.cu)
-#   * Deep supervision + nnU-Net augmentations for quality
+# Philosophy: only enable optimisations whose failure modes we've already
+# validated end-to-end. Aggressive features (torch.compile, channels_last_3d,
+# FusedDiceLoss, fused Adam) are available behind flags but OFF by default
+# because they interact badly with DynUNet + deep supervision + MONAI MetaTensor
+# on current PyTorch (either hangs in compile, or OOMs on first forward).
 #
-# Usage:
-#   bash scripts/run_2xa100.sh                     # 300-epoch production run
-#   bash scripts/run_2xa100.sh --max-epochs 500    # any extra flag is forwarded
-#   DATA_DIR=/custom/path bash scripts/run_2xa100.sh
-#   AMP_DTYPE=fp16 bash scripts/run_2xa100.sh      # if BF16 ever behaves oddly
+# Enabled by default:
+#   * DDP over NVLink (torchrun, 2 processes)
+#   * BF16 autocast (no GradScaler, A100 Tensor Cores, full dynamic range)
+#   * Deep supervision (nnU-Net quality, 4 heads)
+#   * nnU-Net-style augmentations (noise/smooth/contrast/intensity/flips)
+#   * CacheDataset cache_rate=1.0 (deterministic transforms cached in RAM)
+#   * Sharded validation across ranks
+#   * cudnn.benchmark for fastest conv kernels on fixed ROI shapes
 #
-# On 40GB A100s drop ROI_SIZE to "160 160 128" and NUM_SAMPLES=2.
+# Opt-in experimental flags (can be appended to this invocation):
+#   --compile                     torch.compile the model (currently unstable with DS+MONAI)
+#   --memory-format channels_last NDHWC convs (can OOM at ROI 192+ with DS)
+#   --fused-optimizer             torch.optim.Adam(fused=True)
+#   --fused-dice-loss             custom CUDA Dice kernel from src/kernels/
+#
+# Env overrides (in .env or shell):
+#   WANDB_API_KEY   required for online logging
+#   DATA_DIR        BraTS root (defaults to res/data/brats/...)
+#   AMP_DTYPE       "bf16" (default) or "fp16"
+#   ROI_SIZE        "160 160 128" (default) — bump to "192 192 128" if you have headroom
 
 set -euo pipefail
 
@@ -35,7 +44,7 @@ fi
 : "${WANDB_MODE:=online}"
 : "${NPROC_PER_NODE:=2}"
 : "${MAX_EPOCHS:=300}"
-: "${ROI_SIZE:=192 192 128}"
+: "${ROI_SIZE:=160 160 128}"
 : "${NUM_SAMPLES:=2}"
 : "${BATCH_SIZE:=2}"
 : "${NUM_WORKERS:=8}"
@@ -49,17 +58,18 @@ fi
 : "${AMP_DTYPE:=bf16}"
 export DATA_DIR WANDB_MODE
 
-RUN_NAME="${RUN_NAME:-dynunet-nnunet-2xa100-$(date -u +%Y%m%d-%H%M%S)}"
+RUN_NAME="${RUN_NAME:-dynunet-2xa100-$(date -u +%Y%m%d-%H%M%S)}"
 
-echo "== 2x A100 nnU-Net (max perf) =="
-echo "Workdir   : ${WORKDIR}"
-echo "Data dir  : ${DATA_DIR}"
-echo "Run name  : ${RUN_NAME}"
-echo "ROI       : ${ROI_SIZE}"
-echo "Epochs    : ${MAX_EPOCHS}"
-echo "GPUs      : ${NPROC_PER_NODE}"
-echo "AMP dtype : ${AMP_DTYPE}"
-echo "Cache     : ${CACHE_RATE} (${CACHE_NUM_WORKERS} workers)"
+echo "== 2x A100 DynUNet (stable config) =="
+echo "Workdir     : ${WORKDIR}"
+echo "Data dir    : ${DATA_DIR}"
+echo "Run name    : ${RUN_NAME}"
+echo "ROI         : ${ROI_SIZE}"
+echo "Epochs      : ${MAX_EPOCHS}"
+echo "GPUs        : ${NPROC_PER_NODE}"
+echo "AMP dtype   : ${AMP_DTYPE}"
+echo "Cache rate  : ${CACHE_RATE} (${CACHE_NUM_WORKERS} workers)"
+echo "Deep supr.  : on (num=${DEEP_SUPR_NUM})"
 
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -75,12 +85,11 @@ echo "ulimit -n : $(ulimit -n)"
 echo "== GPU visibility =="
 nvidia-smi
 
-# NCCL tuning for single-node NVLink
+# NCCL + timeouts
 export NCCL_IB_DISABLE=0
 export NCCL_P2P_LEVEL=NVL
 export TORCH_NCCL_BLOCKING_WAIT=0
 export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
-# Val sliding-window at 192^3 can take several minutes; bump watchdog to 30 min.
 export TORCH_NCCL_TIMEOUT=1800
 export NCCL_TIMEOUT=1800
 
@@ -89,19 +98,18 @@ export MKL_NUM_THREADS="${NUM_WORKERS}"
 export MASTER_ADDR="${MASTER_ADDR:-127.0.0.1}"
 export MASTER_PORT="${MASTER_PORT:-29500}"
 
-# Cache the JIT-compiled fused Dice kernel in the repo to avoid recompiling
-# on re-runs (small, portable between same-CUDA hosts).
-export TORCH_EXTENSIONS_DIR="${WORKDIR}/.torch_extensions"
-mkdir -p "${TORCH_EXTENSIONS_DIR}"
+# Catch silent Python traces on OOM / C-side crashes in a visible log file.
+LOG_DIR="${WORKDIR}/res/models/${RUN_NAME}"
+mkdir -p "${LOG_DIR}"
+LOG_FILE="${LOG_DIR}/train.log"
 
-echo "== preflight (validates data, CUDA, W&B, compiles fused Dice kernel) =="
+echo "== preflight =="
 uv run python -m src.pipeline \
   --preflight-only \
   --data-dir "${DATA_DIR}" \
-  --wandb-mode "${WANDB_MODE}" \
-  --fused-dice-loss
+  --wandb-mode "${WANDB_MODE}"
 
-echo "== launching DDP training =="
+echo "== launching DDP training (logs also tee'd to ${LOG_FILE}) =="
 exec uv run torchrun \
   --standalone \
   --nnodes=1 \
@@ -125,10 +133,10 @@ exec uv run torchrun \
     --deep-supr-num "${DEEP_SUPR_NUM}" \
     --cache-rate "${CACHE_RATE}" \
     --cache-num-workers "${CACHE_NUM_WORKERS}" \
-    --compile \
-    --memory-format channels_last \
-    --fused-optimizer \
-    --fused-dice-loss \
+    --no-compile \
+    --memory-format standard \
+    --no-fused-optimizer \
+    --no-fused-dice-loss \
     --no-deterministic \
     --wandb-mode "${WANDB_MODE}" \
-    "$@"
+    "$@" 2>&1 | tee "${LOG_FILE}"

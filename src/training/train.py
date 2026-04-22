@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any, Sequence
@@ -176,6 +177,47 @@ def _micro_batch_slices(total: int, micro: int) -> list[slice]:
         raise ValueError("micro-batch sizes must be >= 1")
     size = min(total, micro)
     return [slice(i, min(i + size, total)) for i in range(0, total, size)]
+
+
+class _CompileHeartbeat:
+    """Background thread that prints progress while torch.compile JIT-traces.
+
+    The first forward/backward under ``torch.compile`` can take 30–120 s on
+    DynUNet. GPU utilisation is near zero during that window, which looks
+    identical to a hang. We print a heartbeat line every ``interval`` seconds
+    so the user can tell the process is alive, then stop as soon as the first
+    step completes.
+    """
+
+    def __init__(self, label: str, interval: float = 10.0) -> None:
+        self._label = label
+        self._interval = interval
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._started: float | None = None
+
+    def __enter__(self) -> "_CompileHeartbeat":
+        self._started = time.time()
+        print(
+            f"[compile] {self._label} — JIT tracing in progress. "
+            "GPU util will be ~0% during compile; this is normal.",
+            flush=True,
+        )
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self._stop.set()
+        self._thread.join(timeout=1.0)
+        if self._started is not None:
+            elapsed = time.time() - self._started
+            print(f"[compile] {self._label} finished in {elapsed:.1f}s.", flush=True)
+
+    def _run(self) -> None:
+        assert self._started is not None
+        while not self._stop.wait(self._interval):
+            elapsed = time.time() - self._started
+            print(f"[compile] still tracing... {elapsed:.0f}s elapsed", flush=True)
 
 
 def _build_run_name(args: argparse.Namespace) -> str:
@@ -376,39 +418,46 @@ def _train_one_epoch(
     epoch_loss = 0.0
     step_count = 0
 
+    first_step_of_run = epoch == 0 and args.compile
     for step, batch in enumerate(loader, start=1):
         step_start = time.time()
         step_count += 1
         inputs, labels = _cast_inputs(batch, context.device, memory_format)
         slices = _micro_batch_slices(inputs.shape[0], args.train_micro_batch_size)
 
+        compile_banner = (
+            _CompileHeartbeat("first training step") if (first_step_of_run and step == 1 and context.is_main)
+            else contextlib.nullcontext()
+        )
+
         optimizer.zero_grad(set_to_none=True)
         step_loss = 0.0
-        for s in slices:
-            micro_inputs = inputs[s]
-            micro_labels = labels[s]
-            weight = micro_inputs.shape[0] / inputs.shape[0]
-            with _autocast(context, autocast_dtype):
-                outputs = model(micro_inputs)
-                if args.deep_supervision and outputs.dim() == 6:
-                    loss = _deep_supervision_loss(outputs, micro_labels, loss_fn)
+        with compile_banner:
+            for s in slices:
+                micro_inputs = inputs[s]
+                micro_labels = labels[s]
+                weight = micro_inputs.shape[0] / inputs.shape[0]
+                with _autocast(context, autocast_dtype):
+                    outputs = model(micro_inputs)
+                    if args.deep_supervision and outputs.dim() == 6:
+                        loss = _deep_supervision_loss(outputs, micro_labels, loss_fn)
+                    else:
+                        loss = loss_fn(outputs, micro_labels)
+                    scaled = loss * weight
+                step_loss += loss.item() * weight
+                if scaler is not None:
+                    scaler.scale(scaled).backward()
                 else:
-                    loss = loss_fn(outputs, micro_labels)
-                scaled = loss * weight
-            step_loss += loss.item() * weight
-            if scaler is not None:
-                scaler.scale(scaled).backward()
-            else:
-                scaled.backward()
+                    scaled.backward()
 
-        if scaler is not None:
-            scaler.step(optimizer)
-            scaler.update()
-        else:
-            optimizer.step()
+            if scaler is not None:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
 
         epoch_loss += step_loss
-        if context.is_main and step % 10 == 0:
+        if context.is_main and (step % 10 == 0 or step <= 3):
             print(
                 f"  step {step}/{len(loader)}  train_loss: {step_loss:.4f}"
                 f"  step_time: {time.time() - step_start:.2f}s",
@@ -436,10 +485,18 @@ def _validate(
     mean_metric = DiceMetric(include_background=True, reduction="mean")
     batch_metric = DiceMetric(include_background=True, reduction="mean_batch")
 
+    first_val_ever = not getattr(_validate, "_seen_first", False) and args.compile
+    _validate._seen_first = True
+
     with torch.no_grad():
-        for batch in loader:
+        for val_step, batch in enumerate(loader, start=1):
             inputs, labels = _cast_inputs(batch, context.device, memory_format)
-            with _autocast(context, autocast_dtype):
+            compile_banner = (
+                _CompileHeartbeat("first validation step")
+                if (first_val_ever and val_step == 1 and context.is_main)
+                else contextlib.nullcontext()
+            )
+            with compile_banner, _autocast(context, autocast_dtype):
                 logits = sliding_window_inference(
                     inputs,
                     roi_size=roi_size,
@@ -556,6 +613,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         rank0_print(context, f"Autocast       : {autocast_dtype}")
         rank0_print(context, f"Memory format  : {args.memory_format}")
         rank0_print(context, f"Compiled model : {args.compile}")
+        if args.compile:
+            rank0_print(
+                context,
+                "  torch.compile is ENABLED. The first training step and the first "
+                "validation step will each spend 30–120s JIT tracing. Heartbeat "
+                "lines will print every 10s during compile.",
+            )
         rank0_print(context, f"Fused optimizer: {args.fused_optimizer}")
         rank0_print(context, f"Cache rate     : {args.cache_rate}")
 

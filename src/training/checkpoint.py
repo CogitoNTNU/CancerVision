@@ -26,7 +26,7 @@ def save_checkpoint(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
-    scaler: torch.cuda.amp.GradScaler | None,
+    scaler: torch.amp.GradScaler | None,
     epoch: int,
     best_metric: float,
     best_metric_epoch: int,
@@ -55,7 +55,7 @@ def load_resume(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
-    scaler: torch.cuda.amp.GradScaler | None,
+    scaler: torch.amp.GradScaler | None,
     map_location: torch.device,
 ) -> ResumeState:
     if not resume_path:

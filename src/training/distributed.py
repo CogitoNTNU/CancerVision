@@ -108,11 +108,16 @@ def setup_runtime() -> RuntimeContext:
         env.setdefault("RANK", str(rank))
         env.setdefault("LOCAL_RANK", str(local_rank))
         torch.cuda.set_device(device_index)
+        device = torch.device("cuda", device_index)
         dist.init_process_group(
-            backend="nccl", init_method="env://", rank=rank, world_size=world_size
+            backend="nccl",
+            init_method="env://",
+            rank=rank,
+            world_size=world_size,
+            device_id=device,
         )
         return RuntimeContext(
-            device=torch.device("cuda", device_index),
+            device=device,
             device_index=device_index,
             distributed=True,
             rank=rank,

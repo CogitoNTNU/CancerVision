@@ -100,20 +100,35 @@ The project solves two tasks on BraTS 2020 MRI volumes:
 Unpack the BraTS training release under
 `res/data/brats/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/` (the default `--data-dir`).
 
-### Full pipeline on a vast.ai (or any CUDA) instance
-
-One command from a fresh GPU host:
+### Max-performance run on 2x A100 SXM
 
 ```bash
 git clone <repo> cancervision && cd cancervision
-cp .env.example .env   # put WANDB_API_KEY, optional DATA_DIR / DATA_ARCHIVE
-bash scripts/run_vast.sh   # extra flags forward to training, e.g. --max-epochs 50
+echo "WANDB_API_KEY=<your key>" > .env
+bash scripts/run_2xa100.sh
 ```
 
-`scripts/run_vast.sh` installs `uv`, syncs the env, fetches the dataset if
-`DATA_ARCHIVE` points to a local/remote `.tar.gz` / `.tar` / `.zip`, then calls
-`python -m src.pipeline` which runs preflight (CUDA, BraTS tree integrity, W&B
-credentials) before launching training and logging to Weights & Biases.
+The launcher enables, in order of impact:
+
+- DDP over NVLink (one process per GPU via `torchrun`)
+- `CacheDataset` at full rate (deterministic transforms cached in RAM)
+- BF16 autocast (no GradScaler; full dynamic range)
+- `channels_last_3d` memory format for faster 3D convolutions
+- `torch.compile(mode="default")` with fixed ROI shapes
+- Fused Adam kernel (`torch.optim.Adam(fused=True)`)
+- Custom CUDA fused Dice loss — see `src/kernels/fused_dice.cu`
+- Deep supervision + nnU-Net-style augmentations
+
+See `docs/manuals/performance.md` for how each knob works and how to diagnose.
+
+### Vast.ai one-command run (single GPU)
+
+```bash
+bash scripts/run_vast.sh   # extra flags forward to training
+```
+
+Installs `uv`, syncs the env, fetches the dataset if `DATA_ARCHIVE` is set,
+runs preflight, then launches `python -m src.pipeline`.
 
 ### Train a segmentation model
 

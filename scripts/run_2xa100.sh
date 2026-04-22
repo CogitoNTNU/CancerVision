@@ -1,32 +1,29 @@
 #!/usr/bin/env bash
-# BraTS DynUNet training on 2x A100 SXM — conservative, known-working stack.
+# BraTS DynUNet training on 2x A100 SXM — known-working configuration.
 #
-# Philosophy: only enable optimisations whose failure modes we've already
-# validated end-to-end. Aggressive features (torch.compile, channels_last_3d,
-# FusedDiceLoss, fused Adam) are available behind flags but OFF by default
-# because they interact badly with DynUNet + deep supervision + MONAI MetaTensor
-# on current PyTorch (either hangs in compile, or OOMs on first forward).
+# This launcher mirrors exactly the flag set that previously trained past
+# the first validation in this repo. No experimental performance flags.
+# Per-rank stderr is captured to disk so silent deaths become visible.
 #
-# Enabled by default:
-#   * DDP over NVLink (torchrun, 2 processes)
-#   * BF16 autocast (no GradScaler, A100 Tensor Cores, full dynamic range)
-#   * Deep supervision (nnU-Net quality, 4 heads)
-#   * nnU-Net-style augmentations (noise/smooth/contrast/intensity/flips)
-#   * CacheDataset cache_rate=1.0 (deterministic transforms cached in RAM)
-#   * Sharded validation across ranks
-#   * cudnn.benchmark for fastest conv kernels on fixed ROI shapes
+# Stack:
+#   * DDP (torchrun, 2 procs)
+#   * FP16 autocast + GradScaler  (proven stable; BF16 is also safe but this
+#                                   matches the prior run exactly)
+#   * Deep supervision (nnU-Net quality)
+#   * CacheDataset cache_rate=1.0
+#   * Standard MONAI DiceLoss, standard Adam, standard memory format
+#   * cudnn.benchmark, sharded validation
 #
-# Opt-in experimental flags (can be appended to this invocation):
-#   --compile                     torch.compile the model (currently unstable with DS+MONAI)
-#   --memory-format channels_last NDHWC convs (can OOM at ROI 192+ with DS)
-#   --fused-optimizer             torch.optim.Adam(fused=True)
-#   --fused-dice-loss             custom CUDA Dice kernel from src/kernels/
+# Run it:
+#   bash scripts/run_2xa100.sh
 #
-# Env overrides (in .env or shell):
-#   WANDB_API_KEY   required for online logging
-#   DATA_DIR        BraTS root (defaults to res/data/brats/...)
-#   AMP_DTYPE       "bf16" (default) or "fp16"
-#   ROI_SIZE        "160 160 128" (default) — bump to "192 192 128" if you have headroom
+# Env overrides:
+#   WANDB_API_KEY   (required for online logging)
+#   DATA_DIR        BraTS root
+#   AMP_DTYPE       "fp16" (default) or "bf16"
+#   ROI_SIZE        "128 128 128" (default, tutorial-aligned)
+#   MAX_EPOCHS      300
+#   VAL_INTERVAL    5
 
 set -euo pipefail
 
@@ -44,32 +41,34 @@ fi
 : "${WANDB_MODE:=online}"
 : "${NPROC_PER_NODE:=2}"
 : "${MAX_EPOCHS:=300}"
-: "${ROI_SIZE:=160 160 128}"
-: "${NUM_SAMPLES:=2}"
-: "${BATCH_SIZE:=2}"
-: "${NUM_WORKERS:=8}"
+: "${ROI_SIZE:=128 128 128}"
+: "${NUM_SAMPLES:=4}"
+: "${BATCH_SIZE:=1}"
+: "${NUM_WORKERS:=4}"
 : "${CACHE_NUM_WORKERS:=8}"
 : "${CACHE_RATE:=1.0}"
-: "${MICRO_BATCH:=2}"
+: "${MICRO_BATCH:=1}"
 : "${VAL_SW_BATCH:=4}"
 : "${VAL_INTERVAL:=5}"
 : "${LR:=3e-4}"
 : "${DEEP_SUPR_NUM:=3}"
-: "${AMP_DTYPE:=bf16}"
+: "${AMP_DTYPE:=fp16}"
 export DATA_DIR WANDB_MODE
 
 RUN_NAME="${RUN_NAME:-dynunet-2xa100-$(date -u +%Y%m%d-%H%M%S)}"
+LOG_DIR="${WORKDIR}/res/models/${RUN_NAME}"
+mkdir -p "${LOG_DIR}" "${LOG_DIR}/ranks"
 
-echo "== 2x A100 DynUNet (stable config) =="
+echo "== 2x A100 DynUNet =="
 echo "Workdir     : ${WORKDIR}"
 echo "Data dir    : ${DATA_DIR}"
 echo "Run name    : ${RUN_NAME}"
+echo "Log dir     : ${LOG_DIR}"
 echo "ROI         : ${ROI_SIZE}"
 echo "Epochs      : ${MAX_EPOCHS}"
 echo "GPUs        : ${NPROC_PER_NODE}"
 echo "AMP dtype   : ${AMP_DTYPE}"
-echo "Cache rate  : ${CACHE_RATE} (${CACHE_NUM_WORKERS} workers)"
-echo "Deep supr.  : on (num=${DEEP_SUPR_NUM})"
+echo "Batch/sample: ${BATCH_SIZE}/${NUM_SAMPLES} (micro=${MICRO_BATCH})"
 
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -80,10 +79,9 @@ echo "== syncing python environment =="
 uv sync --frozen
 
 ulimit -n 1048576
-echo "ulimit -n : $(ulimit -n)"
 
 echo "== GPU visibility =="
-nvidia-smi
+nvidia-smi --query-gpu=index,name,memory.total,memory.free --format=csv
 
 # NCCL + timeouts
 export NCCL_IB_DISABLE=0
@@ -93,15 +91,15 @@ export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
 export TORCH_NCCL_TIMEOUT=1800
 export NCCL_TIMEOUT=1800
 
+# Make silent failures visible
+export TORCHELASTIC_ERROR_FILE="${LOG_DIR}/torchelastic_error.json"
+export CUDA_LAUNCH_BLOCKING=0   # set to 1 to debug async CUDA errors; slower
+export PYTHONFAULTHANDLER=1      # dump Python traceback on SIGSEGV/SIGABRT
+
 export OMP_NUM_THREADS="${NUM_WORKERS}"
 export MKL_NUM_THREADS="${NUM_WORKERS}"
 export MASTER_ADDR="${MASTER_ADDR:-127.0.0.1}"
 export MASTER_PORT="${MASTER_PORT:-29500}"
-
-# Catch silent Python traces on OOM / C-side crashes in a visible log file.
-LOG_DIR="${WORKDIR}/res/models/${RUN_NAME}"
-mkdir -p "${LOG_DIR}"
-LOG_FILE="${LOG_DIR}/train.log"
 
 echo "== preflight =="
 uv run python -m src.pipeline \
@@ -109,11 +107,21 @@ uv run python -m src.pipeline \
   --data-dir "${DATA_DIR}" \
   --wandb-mode "${WANDB_MODE}"
 
-echo "== launching DDP training (logs also tee'd to ${LOG_FILE}) =="
+echo "== launching DDP training =="
+echo "Rank stderr logs: ${LOG_DIR}/ranks/"
+echo "Combined stdout : ${LOG_DIR}/train.log"
+echo
+
+# torchrun --redirects=3 sends each rank's stdout/stderr to
+# ${LOG_DIR}/ranks/<rank>/stdout.log and stderr.log. The parent still shows
+# rank-0's stdout via --tee=3 so the tmux session remains interactive.
 exec uv run torchrun \
   --standalone \
   --nnodes=1 \
   --nproc_per_node="${NPROC_PER_NODE}" \
+  --log_dir "${LOG_DIR}/ranks" \
+  --redirects=3 \
+  --tee=3 \
   -m src.training.train \
     --model dynunet \
     --data-dir "${DATA_DIR}" \
@@ -139,4 +147,4 @@ exec uv run torchrun \
     --no-fused-dice-loss \
     --no-deterministic \
     --wandb-mode "${WANDB_MODE}" \
-    "$@" 2>&1 | tee "${LOG_FILE}"
+    "$@" 2>&1 | tee "${LOG_DIR}/train.log"

@@ -109,9 +109,24 @@ def infer_cancervision_path_prefix_maps(
         return list(path_prefix_maps)
 
     dataset_root = DEFAULT_CANCERVISION_DATASET_ROOT.resolve()
+    mappings: list[str] = []
+    # If the exact cancervision-standardized folder exists, map the
+    # Windows-default path used in manifests to that folder.
     if dataset_root.is_dir():
-        return [f"{DEFAULT_CANCERVISION_WINDOWS_ROOT}={dataset_root}"]
-    return []
+        mappings.append(f"{DEFAULT_CANCERVISION_WINDOWS_ROOT}={dataset_root}")
+
+    # Many manifests reference a Z:\\dataset\\<datasetname> path. If we have
+    # a local `res/dataset` folder, add a more general mapping from
+    # `Z:\\dataset` -> local res/dataset parent so those manifests resolve.
+    dataset_parent = dataset_root.parent
+    if dataset_parent.is_dir():
+        windows_base = r"Z:\\dataset"
+        mappings.append(f"{windows_base}={dataset_parent}")
+
+    if mappings:
+        print(f"Applying auto-inferred path prefixes to manifest paths: {mappings}")
+
+    return mappings
 
 
 def resolve_cancervision_task_manifest_path(

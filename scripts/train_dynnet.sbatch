@@ -11,7 +11,7 @@
 #SBATCH --job-name="dynnet"
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gres=gpu:100:1
+#SBATCH --gres=gpu:a100:1
 #SBATCH --constraint=gpu40g
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G

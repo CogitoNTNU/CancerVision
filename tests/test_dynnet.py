@@ -31,6 +31,7 @@ from src.models.dynnet import (
     detect_gpu_profile_from_constraints,
     detect_requested_world_size,
     get_dataset_config,
+    infer_cancervision_path_prefix_maps,
     is_cuda_oom_error,
     load_resume_state,
     maybe_init_wandb,
@@ -137,6 +138,39 @@ class DynnetSmokeTests(unittest.TestCase):
                 r"C:\Users\Polar\Documents\GitHub\CancerVision\res\dataset\cancervision-standardized\segmentation_native\case\image.nii.gz"
             ),
         )
+
+    def test_infer_cancervision_path_prefix_maps_handles_brats2020_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "cancervision-standardized").mkdir()
+            (root / "BraTS2020_TrainingData" / "MICCAI_BraTS2020_TrainingData").mkdir(
+                parents=True
+            )
+
+            with mock.patch.object(
+                dynnet_data_module,
+                "DEFAULT_CANCERVISION_DATASET_ROOT",
+                root / "cancervision-standardized",
+            ):
+                mappings = infer_cancervision_path_prefix_maps()
+
+            self.assertIn(rf"Z:\dataset\brats2020={root}", mappings)
+            remapped = apply_path_prefix_maps(
+                r"Z:\dataset\brats2020\BraTS2020_TrainingData\MICCAI_BraTS2020_TrainingData\BraTS20_Training_001\BraTS20_Training_001_t1ce.nii",
+                mappings,
+            )
+            self.assertEqual(
+                remapped,
+                os.path.normpath(
+                    str(
+                        root
+                        / "BraTS2020_TrainingData"
+                        / "MICCAI_BraTS2020_TrainingData"
+                        / "BraTS20_Training_001"
+                        / "BraTS20_Training_001_t1ce.nii"
+                    )
+                ),
+            )
 
     def test_build_micro_batch_slices_splits_effective_batch(self) -> None:
         slices = build_micro_batch_slices(total_batch_size=4, requested_micro_batch_size=1)

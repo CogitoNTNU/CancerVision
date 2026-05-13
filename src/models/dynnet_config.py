@@ -23,8 +23,8 @@ DEFAULT_CANCERVISION_DATASET_ROOT = (
 )
 DEFAULT_CANCERVISION_TASK_MANIFEST = (
     DEFAULT_CANCERVISION_DATASET_ROOT
-    / "task_manifests"
-    / "segmentation_binary_curated.csv"
+    / "segmentation_native"
+    / "segmentation_materialized_manifest.csv"
 )
 DEFAULT_SAVE_DIR = REPO_ROOT / "res" / "models"
 WANDB_PROJECT = (os.getenv("WANDB_PROJECT", "cancervision") or "cancervision").strip()

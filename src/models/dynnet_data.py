@@ -196,6 +196,41 @@ def _resolve_manifest_data_path(
             candidates.append(manifest_dir / raw_path)
             candidates.append(raw_path)
 
+    # When manifests contain Windows-drive paths (e.g. "Z:\\..."), also try
+    # common mounted/mapped fallbacks so Linux clusters can resolve them
+    # automatically.
+    win_match = re.match(r"^(?P<drive>[a-zA-Z]):[\\/](?P<rest>.*)$", raw_path or "")
+    if win_match:
+        drive = win_match.group("drive").lower()
+        rest = win_match.group("rest") or ""
+        parts = [p for p in re.split(r"[\\/]+", rest) if p]
+        parts_no_dataset = parts[1:] if parts and parts[0].lower() == "dataset" else parts
+        # try the conventional /mnt/<drive>/... mount used on many systems
+        if os.name != "nt":
+            if parts:
+                candidates.append(Path("/mnt") / drive / Path(*parts))
+        # try mapping into this repo's res/dataset parent (useful for Z:\\dataset\\...)
+        try:
+            dataset_parent = DEFAULT_CANCERVISION_DATASET_ROOT.parent
+            if parts_no_dataset:
+                candidates.append(dataset_parent.joinpath(*parts_no_dataset))
+            dataset_root = DEFAULT_CANCERVISION_DATASET_ROOT
+            if parts_no_dataset:
+                candidates.append(
+                    dataset_root.joinpath("segmentation_native", *parts_no_dataset)
+                )
+            if parts:
+                candidates.append(dataset_root.joinpath("segmentation_native", *parts))
+            if case_id:
+                seg_root = dataset_root / "segmentation_native" / case_id / "seg"
+                if field_name == "image_path":
+                    candidates.append(seg_root / "image.nii.gz")
+                elif field_name == "mask_path":
+                    candidates.append(seg_root / "mask.nii.gz")
+        except Exception:
+            # best-effort only; don't fail resolution if this logic errors
+            pass
+
     for candidate in candidates:
         try:
             return os.path.normpath(str(resolve_existing_path(candidate)))

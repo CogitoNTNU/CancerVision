@@ -126,7 +126,7 @@ def infer_cancervision_path_prefix_maps(
     # a local `res/dataset` folder, add a more general mapping from
     # `Z:\\dataset` -> local res/dataset parent so those manifests resolve.
     if dataset_parent.is_dir():
-        windows_base = r"Z:\\dataset"
+        windows_base = r"Z:\dataset"
         mappings.append(f"{windows_base}={dataset_parent}")
 
     if mappings:

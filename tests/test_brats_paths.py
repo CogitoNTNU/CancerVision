@@ -1,11 +1,17 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from src.datasets.brats_paths import (
     build_brats_data_dicts,
     detect_brats_layout,
     resolve_brats_data_dir,
+)
+from src.models.dynnet_data import (
+    apply_path_prefix_maps,
+    infer_cancervision_path_prefix_maps,
 )
 
 
@@ -85,3 +91,68 @@ class BratsPathTests(unittest.TestCase):
 
             self.assertEqual(resolved, wrapper_dir)
             self.assertEqual(len(rows), 1)
+
+    def test_infer_cancervision_path_prefix_maps_handles_cluster_brats2020_layout(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        dataset_root = repo_root / "res" / "dataset"
+        standardized_root = dataset_root / "cancervision-standardized"
+        brats_root = dataset_root / "BraTS2020_TrainingData" / "MICCAI_BraTS2020_TrainingData"
+
+        if not standardized_root.is_dir() or not brats_root.is_dir():
+            self.skipTest("Cluster-style dataset layout is not available in this workspace")
+
+        with mock.patch(
+            "src.models.dynnet_data.DEFAULT_CANCERVISION_DATASET_ROOT",
+            standardized_root,
+        ):
+            mappings = infer_cancervision_path_prefix_maps()
+
+        self.assertIn(rf"Z:\dataset\brats2020={dataset_root}", mappings)
+
+        remapped = apply_path_prefix_maps(
+            r"Z:\dataset\brats2020\BraTS2020_TrainingData\MICCAI_BraTS2020_TrainingData\BraTS20_Training_001\BraTS20_Training_001_t1ce.nii",
+            mappings,
+        )
+        self.assertEqual(
+            os.path.normpath(remapped),
+            os.path.normpath(
+                str(
+                    brats_root
+                    / "BraTS20_Training_001"
+                    / "BraTS20_Training_001_t1ce.nii"
+                )
+            ),
+        )
+
+    def test_infer_cancervision_path_prefix_maps_handles_standardized_root(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        standardized_root = repo_root / "res" / "dataset" / "cancervision-standardized"
+
+        if not standardized_root.is_dir():
+            self.skipTest("CancerVision standardized dataset root is not available in this workspace")
+
+        with mock.patch(
+            "src.models.dynnet_data.DEFAULT_CANCERVISION_DATASET_ROOT",
+            standardized_root,
+        ):
+            mappings = infer_cancervision_path_prefix_maps()
+
+        self.assertIn(
+            rf"Z:\dataset\cancervision-standardized={standardized_root}",
+            mappings,
+        )
+
+        remapped = apply_path_prefix_maps(
+            r"Z:\dataset\cancervision-standardized\task_manifests\segmentation_binary_curated.csv",
+            mappings,
+        )
+        self.assertEqual(
+            os.path.normpath(remapped),
+            os.path.normpath(
+                str(
+                    standardized_root
+                    / "task_manifests"
+                    / "segmentation_binary_curated.csv"
+                )
+            ),
+        )

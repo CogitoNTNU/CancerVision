@@ -17,10 +17,17 @@ from monai.transforms import (
     EnsureChannelFirstd,
     LoadImaged,
     NormalizeIntensityd,
+    Orientationd,
+    RandAdjustContrastd,
+    RandAffined,
     RandCropByPosNegLabeld,
     RandFlipd,
+    RandGaussianNoised,
+    RandGaussianSmoothd,
+    RandHistogramShiftd,
     RandScaleIntensityd,
     RandShiftIntensityd,
+    Spacingd,
     SpatialPadd,
 )
 from sklearn.model_selection import train_test_split
@@ -394,6 +401,9 @@ def get_brats_val_transforms() -> Compose:
     )
 
 
+CANCERVISION_TARGET_SPACING = (1.0, 1.0, 1.0)
+
+
 def get_cancervision_binary_seg_train_transforms(
     roi_size: Sequence[int],
     num_samples: int,
@@ -406,6 +416,12 @@ def get_cancervision_binary_seg_train_transforms(
             EnsureChannelFirstd(keys=["image", "label"]),
             BinarizeLabeld(keys="label"),
             EnsureFloatLabeld(keys="label"),
+            Orientationd(keys=["image", "label"], axcodes="RAS"),
+            Spacingd(
+                keys=["image", "label"],
+                pixdim=CANCERVISION_TARGET_SPACING,
+                mode=("bilinear", "nearest"),
+            ),
             NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
             SpatialPadd(keys=["image", "label"], spatial_size=roi_size),
             RandCropByPosNegLabeld(
@@ -421,8 +437,26 @@ def get_cancervision_binary_seg_train_transforms(
             RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
             RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
             RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),
+            RandAffined(
+                keys=["image", "label"],
+                prob=0.3,
+                rotate_range=(0.5, 0.5, 0.5),
+                scale_range=(0.15, 0.15, 0.15),
+                mode=("bilinear", "nearest"),
+                padding_mode="border",
+            ),
+            RandGaussianNoised(keys="image", prob=0.15, std=0.1),
+            RandGaussianSmoothd(
+                keys="image",
+                prob=0.2,
+                sigma_x=(0.5, 1.0),
+                sigma_y=(0.5, 1.0),
+                sigma_z=(0.5, 1.0),
+            ),
             RandScaleIntensityd(keys="image", factors=0.1, prob=1.0),
             RandShiftIntensityd(keys="image", offsets=0.1, prob=1.0),
+            RandAdjustContrastd(keys="image", prob=0.3, gamma=(0.7, 1.5)),
+            RandHistogramShiftd(keys="image", prob=0.2, num_control_points=10),
         ]
     )
 
@@ -434,6 +468,12 @@ def get_cancervision_binary_seg_val_transforms() -> Compose:
             EnsureChannelFirstd(keys=["image", "label"]),
             BinarizeLabeld(keys="label"),
             EnsureFloatLabeld(keys="label"),
+            Orientationd(keys=["image", "label"], axcodes="RAS"),
+            Spacingd(
+                keys=["image", "label"],
+                pixdim=CANCERVISION_TARGET_SPACING,
+                mode=("bilinear", "nearest"),
+            ),
             NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
         ]
     )

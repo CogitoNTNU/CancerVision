@@ -228,7 +228,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--loss",
-        choices=("dice", "dicece"),
+        choices=("dice", "dicece", "dicefocal", "tversky"),
         default="dice",
         help="Segmentation loss used for optimization.",
     )
@@ -236,13 +236,55 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--dicece-lambda-dice",
         type=float,
         default=0.7,
-        help="Dice term weight when --loss=dicece.",
+        help="Dice term weight when --loss=dicece or --loss=dicefocal.",
     )
     parser.add_argument(
         "--dicece-lambda-ce",
         type=float,
         default=0.3,
         help="Cross-entropy term weight when --loss=dicece.",
+    )
+    parser.add_argument(
+        "--dicefocal-lambda-focal",
+        type=float,
+        default=1.0,
+        help="Focal term weight when --loss=dicefocal.",
+    )
+    parser.add_argument(
+        "--focal-gamma",
+        type=float,
+        default=2.0,
+        help="Focal loss gamma when --loss=dicefocal.",
+    )
+    parser.add_argument(
+        "--tversky-alpha",
+        type=float,
+        default=0.3,
+        help="Tversky alpha (false-positive weight) when --loss=tversky.",
+    )
+    parser.add_argument(
+        "--tversky-beta",
+        type=float,
+        default=0.7,
+        help="Tversky beta (false-negative weight) when --loss=tversky.",
+    )
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        default=0.0,
+        help="DynUNet dropout probability (0 disables).",
+    )
+    parser.add_argument(
+        "--deep-supervision",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable DynUNet deep supervision (loss summed across decoder scales).",
+    )
+    parser.add_argument(
+        "--deep-supr-num",
+        type=int,
+        default=2,
+        help="Number of additional deep-supervision heads (>=1).",
     )
     parser.add_argument(
         "--val-thresholds",
@@ -319,6 +361,19 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--dicece-lambda-ce must be non-negative")
     if args.loss == "dicece" and (args.dicece_lambda_dice + args.dicece_lambda_ce) <= 0:
         raise ValueError("DiceCE loss requires a positive sum of lambda weights")
+    if args.dicefocal_lambda_focal < 0:
+        raise ValueError("--dicefocal-lambda-focal must be non-negative")
+    if args.focal_gamma < 0:
+        raise ValueError("--focal-gamma must be non-negative")
+    if args.loss == "dicefocal" and (args.dicece_lambda_dice + args.dicefocal_lambda_focal) <= 0:
+        raise ValueError("DiceFocal loss requires a positive sum of dice + focal weights")
+    if args.loss == "tversky":
+        if args.tversky_alpha <= 0 or args.tversky_beta <= 0:
+            raise ValueError("--tversky-alpha and --tversky-beta must be > 0")
+    if not 0.0 <= args.dropout < 1.0:
+        raise ValueError("--dropout must be in [0, 1)")
+    if args.deep_supervision and args.deep_supr_num < 1:
+        raise ValueError("--deep-supr-num must be >= 1 when --deep-supervision is enabled")
     if args.val_thresholds is not None:
         if not args.val_thresholds:
             raise ValueError("--val-thresholds must include at least one value")

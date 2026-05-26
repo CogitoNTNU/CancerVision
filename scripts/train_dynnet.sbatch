@@ -68,23 +68,30 @@ GPU_PROFILE="${GPU_PROFILE:-gpu40g}"
 WANDB_MODE="${WANDB_MODE:-online}"
 WANDB_PROJECT="${WANDB_PROJECT:-cancervision}"
 WANDB_ENTITY="${WANDB_ENTITY:-}"
-MAX_EPOCHS="${MAX_EPOCHS:-200}"
+MAX_EPOCHS="${MAX_EPOCHS:-300}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
 TRAIN_MICRO_BATCH_SIZE="${TRAIN_MICRO_BATCH_SIZE:-1}"
-NUM_SAMPLES="${NUM_SAMPLES:-2}"
+NUM_SAMPLES="${NUM_SAMPLES:-4}"
 VAL_SW_BATCH_SIZE="${VAL_SW_BATCH_SIZE:-1}"
 NUM_WORKERS="${NUM_WORKERS:-${SLURM_CPUS_PER_TASK:-4}}"
 VAL_INTERVAL="${VAL_INTERVAL:-1}"
 LR="${LR:-1e-4}"
-WEIGHT_DECAY="${WEIGHT_DECAY:-1e-5}"
-LOSS="${LOSS:-dicece}"
-DICECE_LAMBDA_DICE="${DICECE_LAMBDA_DICE:-0.7}"
+WEIGHT_DECAY="${WEIGHT_DECAY:-3e-5}"
+LOSS="${LOSS:-dicefocal}"
+DICECE_LAMBDA_DICE="${DICECE_LAMBDA_DICE:-1.0}"
 DICECE_LAMBDA_CE="${DICECE_LAMBDA_CE:-0.3}"
+DICEFOCAL_LAMBDA_FOCAL="${DICEFOCAL_LAMBDA_FOCAL:-1.0}"
+FOCAL_GAMMA="${FOCAL_GAMMA:-2.0}"
+TVERSKY_ALPHA="${TVERSKY_ALPHA:-0.3}"
+TVERSKY_BETA="${TVERSKY_BETA:-0.7}"
+DROPOUT="${DROPOUT:-0.0}"
+DEEP_SUPERVISION="${DEEP_SUPERVISION:-true}"
+DEEP_SUPR_NUM="${DEEP_SUPR_NUM:-2}"
 CROP_POS_WEIGHT="${CROP_POS_WEIGHT:-3}"
 CROP_NEG_WEIGHT="${CROP_NEG_WEIGHT:-1}"
-VAL_THRESHOLDS="${VAL_THRESHOLDS:-0.30 0.35 0.40 0.45 0.50 0.55 0.60}"
+VAL_THRESHOLDS="${VAL_THRESHOLDS:-0.20 0.25 0.30 0.35 0.40 0.45 0.50 0.55 0.60 0.65 0.70 0.75}"
 MIN_EPOCHS="${MIN_EPOCHS:-50}"
-EARLY_STOP_PATIENCE="${EARLY_STOP_PATIENCE:-20}"
+EARLY_STOP_PATIENCE="${EARLY_STOP_PATIENCE:-40}"
 RUN_NAME="${RUN_NAME:-dynnet-${DATASET_SOURCE}-${SLURM_JOB_ID:-local}}"
 TASK_MANIFEST="${TASK_MANIFEST:-${WORKDIR}/res/dataset/cancervision-standardized/segmentation_native/segmentation_materialized_manifest.csv}"
 DATA_DIR="${DATA_DIR:-${WORKDIR}/res/dataset/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData}"
@@ -111,6 +118,13 @@ for var_name in \
   LOSS \
   DICECE_LAMBDA_DICE \
   DICECE_LAMBDA_CE \
+  DICEFOCAL_LAMBDA_FOCAL \
+  FOCAL_GAMMA \
+  TVERSKY_ALPHA \
+  TVERSKY_BETA \
+  DROPOUT \
+  DEEP_SUPERVISION \
+  DEEP_SUPR_NUM \
   CROP_POS_WEIGHT \
   CROP_NEG_WEIGHT \
   VAL_THRESHOLDS \
@@ -138,6 +152,10 @@ echo "Validation sw_batch_size: ${VAL_SW_BATCH_SIZE}"
 echo "Num samples: ${NUM_SAMPLES}"
 echo "Loss: ${LOSS}"
 echo "DiceCE lambdas: dice=${DICECE_LAMBDA_DICE} ce=${DICECE_LAMBDA_CE}"
+echo "DiceFocal: dice=${DICECE_LAMBDA_DICE} focal=${DICEFOCAL_LAMBDA_FOCAL} gamma=${FOCAL_GAMMA}"
+echo "Tversky: alpha=${TVERSKY_ALPHA} beta=${TVERSKY_BETA}"
+echo "Dropout: ${DROPOUT}"
+echo "Deep supervision: ${DEEP_SUPERVISION} (deep_supr_num=${DEEP_SUPR_NUM})"
 echo "Crop weights: pos=${CROP_POS_WEIGHT} neg=${CROP_NEG_WEIGHT}"
 echo "Val thresholds: ${VAL_THRESHOLDS:-<default>}"
 echo "Early stop: min_epochs=${MIN_EPOCHS} patience=${EARLY_STOP_PATIENCE}"
@@ -159,6 +177,12 @@ TRAIN_ARGS=(
   --loss "${LOSS}"
   --dicece-lambda-dice "${DICECE_LAMBDA_DICE}"
   --dicece-lambda-ce "${DICECE_LAMBDA_CE}"
+  --dicefocal-lambda-focal "${DICEFOCAL_LAMBDA_FOCAL}"
+  --focal-gamma "${FOCAL_GAMMA}"
+  --tversky-alpha "${TVERSKY_ALPHA}"
+  --tversky-beta "${TVERSKY_BETA}"
+  --dropout "${DROPOUT}"
+  --deep-supr-num "${DEEP_SUPR_NUM}"
   --crop-pos-weight "${CROP_POS_WEIGHT}"
   --crop-neg-weight "${CROP_NEG_WEIGHT}"
   --min-epochs "${MIN_EPOCHS}"
@@ -166,6 +190,15 @@ TRAIN_ARGS=(
   --wandb-mode "${WANDB_MODE}"
   --run-name "${RUN_NAME}"
 )
+
+case "${DEEP_SUPERVISION,,}" in
+  true|1|yes|on)
+    TRAIN_ARGS+=(--deep-supervision)
+    ;;
+  *)
+    TRAIN_ARGS+=(--no-deep-supervision)
+    ;;
+esac
 
 if [ "${DATASET_SOURCE}" = "brats" ]; then
   TRAIN_ARGS+=(--data-dir "${DATA_DIR}")

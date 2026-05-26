@@ -12,7 +12,7 @@ import torch
 from monai.config import print_config
 from monai.data import DataLoader, Dataset, decollate_batch, list_data_collate
 from monai.inferers import sliding_window_inference
-from monai.losses import DiceCELoss, DiceLoss
+from monai.losses import DiceCELoss, DiceFocalLoss, DiceLoss, TverskyLoss
 from monai.metrics import DiceMetric
 from monai.networks.nets import DynUNet
 from monai.transforms import AsDiscrete
@@ -116,19 +116,43 @@ def build_loss_function(args: argparse.Namespace) -> torch.nn.Module:
         return DiceLoss(
             smooth_nr=0,
             smooth_dr=1e-5,
-            squared_pred=True,
+            squared_pred=False,
             to_onehot_y=False,
             sigmoid=True,
+            batch=True,
         )
     if args.loss == "dicece":
         return DiceCELoss(
             smooth_nr=0,
             smooth_dr=1e-5,
-            squared_pred=True,
+            squared_pred=False,
             to_onehot_y=False,
             sigmoid=True,
+            batch=True,
             lambda_dice=args.dicece_lambda_dice,
             lambda_ce=args.dicece_lambda_ce,
+        )
+    if args.loss == "dicefocal":
+        return DiceFocalLoss(
+            smooth_nr=0,
+            smooth_dr=1e-5,
+            squared_pred=False,
+            to_onehot_y=False,
+            sigmoid=True,
+            batch=True,
+            gamma=args.focal_gamma,
+            lambda_dice=args.dicece_lambda_dice,
+            lambda_focal=args.dicefocal_lambda_focal,
+        )
+    if args.loss == "tversky":
+        return TverskyLoss(
+            smooth_nr=0,
+            smooth_dr=1e-5,
+            to_onehot_y=False,
+            sigmoid=True,
+            batch=True,
+            alpha=args.tversky_alpha,
+            beta=args.tversky_beta,
         )
     raise ValueError(f"Unsupported loss: {args.loss}")
 
@@ -165,11 +189,21 @@ def summarize_threshold_metrics(
     return summarized
 
 
-def build_model(*, in_channels: int = 4, out_channels: int = 3) -> DynUNet:
+def build_model(
+    *,
+    in_channels: int = 4,
+    out_channels: int = 3,
+    dropout: float = 0.0,
+    deep_supervision: bool = False,
+    deep_supr_num: int = 2,
+) -> DynUNet:
     return build_model_with_filters(
         in_channels=in_channels,
         out_channels=out_channels,
         filters=GPU_PROFILE_CONFIGS[DEFAULT_GPU_PROFILE_NAME].model_filters,
+        dropout=dropout,
+        deep_supervision=deep_supervision,
+        deep_supr_num=deep_supr_num,
     )
 
 
@@ -178,6 +212,9 @@ def build_model_with_filters(
     in_channels: int = 4,
     out_channels: int = 3,
     filters: Sequence[int],
+    dropout: float = 0.0,
+    deep_supervision: bool = False,
+    deep_supr_num: int = 2,
 ) -> DynUNet:
     return DynUNet(
         spatial_dims=3,
@@ -187,10 +224,27 @@ def build_model_with_filters(
         strides=[1, 2, 2, 2, 2],
         upsample_kernel_size=[2, 2, 2, 2],
         filters=list(filters),
-        dropout=0.2,
+        dropout=dropout,
         res_block=True,
-        deep_supervision=False,
+        deep_supervision=deep_supervision,
+        deep_supr_num=deep_supr_num if deep_supervision else 1,
     )
+
+
+def _compute_deep_supervision_loss(
+    outputs: torch.Tensor,
+    labels: torch.Tensor,
+    loss_function: torch.nn.Module,
+) -> torch.Tensor:
+    # outputs shape: (B, deep_supr_num+1, C, *spatial). Index 0 is the full-resolution head.
+    num_heads = outputs.shape[1]
+    weights = [0.5 ** i for i in range(num_heads)]
+    total_weight = sum(weights)
+    weighted = sum(
+        (weights[i] / total_weight) * loss_function(outputs[:, i], labels)
+        for i in range(num_heads)
+    )
+    return weighted
 
 
 def maybe_init_wandb(
@@ -344,7 +398,12 @@ def train_one_epoch(
 
             with get_autocast_context(context, should_use_amp(args, context)):
                 outputs = model(micro_inputs)
-                micro_loss = loss_function(outputs, micro_labels)
+                if outputs.ndim == micro_inputs.ndim + 1:
+                    micro_loss = _compute_deep_supervision_loss(
+                        outputs, micro_labels, loss_function
+                    )
+                else:
+                    micro_loss = loss_function(outputs, micro_labels)
                 scaled_loss = micro_loss * micro_weight
 
             step_loss += micro_loss.item() * micro_weight
@@ -519,6 +578,25 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "Loss lambdas   : "
                 f"dice={args.dicece_lambda_dice:.2f} ce={args.dicece_lambda_ce:.2f}",
             )
+        elif args.loss == "dicefocal":
+            rank0_print(
+                context,
+                "Loss lambdas   : "
+                f"dice={args.dicece_lambda_dice:.2f} focal={args.dicefocal_lambda_focal:.2f} "
+                f"gamma={args.focal_gamma:.2f}",
+            )
+        elif args.loss == "tversky":
+            rank0_print(
+                context,
+                "Tversky        : "
+                f"alpha={args.tversky_alpha:.2f} beta={args.tversky_beta:.2f}",
+            )
+        rank0_print(context, f"Dropout        : {args.dropout:.2f}")
+        rank0_print(
+            context,
+            f"Deep supervision: {args.deep_supervision} "
+            f"(deep_supr_num={args.deep_supr_num if args.deep_supervision else 0})",
+        )
         rank0_print(context, f"Val thresholds : {validation_thresholds}")
         rank0_print(context, f"Min epochs     : {args.min_epochs}")
         rank0_print(context, f"Early patience : {args.early_stop_patience}")
@@ -570,6 +648,9 @@ def main(argv: Sequence[str] | None = None) -> None:
                 in_channels=dataset_config.in_channels,
                 out_channels=dataset_config.out_channels,
                 filters=args.model_filters,
+                dropout=args.dropout,
+                deep_supervision=args.deep_supervision,
+                deep_supr_num=args.deep_supr_num,
             ).to(context.device)
         except Exception as exc:
             if not is_cuda_oom_error(exc):
@@ -658,6 +739,13 @@ def main(argv: Sequence[str] | None = None) -> None:
             "loss": args.loss,
             "dicece_lambda_dice": args.dicece_lambda_dice,
             "dicece_lambda_ce": args.dicece_lambda_ce,
+            "dicefocal_lambda_focal": args.dicefocal_lambda_focal,
+            "focal_gamma": args.focal_gamma,
+            "tversky_alpha": args.tversky_alpha,
+            "tversky_beta": args.tversky_beta,
+            "dropout": args.dropout,
+            "deep_supervision": args.deep_supervision,
+            "deep_supr_num": args.deep_supr_num if args.deep_supervision else 0,
             "val_thresholds": list(validation_thresholds),
             "min_epochs": args.min_epochs,
             "early_stop_patience": args.early_stop_patience,

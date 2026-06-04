@@ -1,0 +1,17 @@
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.5.0) or chardet (7.0.1)/charset_normalizer (3.4.3) doesn't match a supported version!
+  warnings.warn(
+<frozen importlib._bootstrap_external>:1325: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+/cluster/home/eldarja/CancerVision/src/models/dynnet_data.py:517: UserWarning: Excluded 158 CancerVision segmentation rows with image/mask shape mismatches from /cluster/home/eldarja/CancerVision/res/dataset/cancervision-standardized/segmentation_native/segmentation_materialized_manifest.csv. By dataset: {'utsw_glioma': 158}.
+  train_dicts, val_dicts, test_dicts = build_cancervision_segmentation_splits(
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/monai/utils/deprecate_utils.py:321: FutureWarning: monai.transforms.spatial.dictionary Orientationd.__init__:labels: Current default value of argument `labels=(('L', 'R'), ('P', 'A'), ('I', 'S'))` was changed in version None from `labels=(('L', 'R'), ('P', 'A'), ('I', 'S'))` to `labels=None`. Default value changed to None meaning that the transform now uses the 'space' of a meta-tensor, if applicable, to determine appropriate axis labels.
+  warn_deprecated(argname, msg, warning_category)
+wandb: Tracking run with wandb version 0.25.0
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /cluster/home/eldarja/CancerVision/wandb/offline-run-20260603_121233-9ca3wglz
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/monai/inferers/utils.py:231: UserWarning: Using a non-tuple sequence for multidimensional indexing is deprecated and will be changed in pytorch 2.9; use x[tuple(seq)] instead of x[seq]. In pytorch 2.9 this will be interpreted as tensor index, x[torch.tensor(seq)], which will result either in an error or a different result (Triggered internally at /pytorch/torch/csrc/autograd/python_variable_indexing.cpp:347.)
+  win_data = inputs[unravel_slice[0]].to(sw_device)
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/monai/inferers/utils.py:370: UserWarning: Using a non-tuple sequence for multidimensional indexing is deprecated and will be changed in pytorch 2.9; use x[tuple(seq)] instead of x[seq]. In pytorch 2.9 this will be interpreted as tensor index, x[torch.tensor(seq)], which will result either in an error or a different result (Triggered internally at /pytorch/torch/csrc/autograd/python_variable_indexing.cpp:347.)
+  out[idx_zm] += p
+srun: Job step aborted: Waiting up to 62 seconds for job step to finish.
+[2026-06-04T12:07:53.045] error: *** STEP 24593114.0 ON idun-07-05 CANCELLED AT 2026-06-04T12:07:53 DUE TO TIME LIMIT ***
+[2026-06-04T12:07:53.045] error: *** JOB 24593114 ON idun-07-05 CANCELLED AT 2026-06-04T12:07:53 DUE TO TIME LIMIT ***

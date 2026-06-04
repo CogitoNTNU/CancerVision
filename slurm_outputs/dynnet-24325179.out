@@ -1,0 +1,32 @@
+Running from: /cluster/home/eldarja/CancerVision
+Job name: dynnet
+Job id: 24325179
+Node list: idun-01-03
+Constraint: unset
+Python: /cluster/home/eldarja/CancerVision/.venv/bin/python
+CUDA_VISIBLE_DEVICES=0
+GPU profile: gpu80g
+Dataset source: cancervision_binary_seg
+Train micro-batch size: 1
+Validation sw_batch_size: 1
+Num samples: 1
+Sun Apr 19 23:59:00 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 575.57.08              Driver Version: 575.57.08      CUDA Version: 12.9     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H100 80GB HBM3          On  |   00000000:BB:00.0 Off |                    0 |
+| N/A   27C    P0             71W /  700W |       0MiB /  81559MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+

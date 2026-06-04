@@ -1,0 +1,18 @@
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.5.0) or chardet (7.0.1)/charset_normalizer (3.4.3) doesn't match a supported version!
+  warnings.warn(
+<frozen importlib._bootstrap_external>:1325: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet.py", line 138, in <module>
+    main()
+    ~~~~^^
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet_train.py", line 336, in main
+    train_dicts, val_dicts, test_dicts = build_dataset_splits(args)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet_data.py", line 332, in build_dataset_splits
+    raise RuntimeError(
+        f"No train rows found in CancerVision task manifest: {task_manifest}"
+    )
+RuntimeError: No train rows found in CancerVision task manifest: /cluster/home/eldarja/CancerVision/res/dataset/cancervision-standardized/task_manifests/segmentation_binary_curated.csv
+srun: error: idun-08-01: task 0: Exited with exit code 1

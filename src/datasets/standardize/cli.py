@@ -11,6 +11,15 @@ from .constants import (
     CFB_GBM_DEFAULT_ROOT,
     CFB_GBM_SOURCE_MANIFEST_DEFAULT,
     CFB_GBM_STANDARDIZED_DEFAULT_ROOT,
+    BRATS2020_DEFAULT_ROOT,
+    BRATS2020_SOURCE_MANIFEST_DEFAULT,
+    BRATS2020_STANDARDIZED_DEFAULT_ROOT,
+    BRATS2023_DEFAULT_ROOT,
+    BRATS2023_SOURCE_MANIFEST_DEFAULT,
+    BRATS2023_STANDARDIZED_DEFAULT_ROOT,
+    BRATS2024_DEFAULT_ROOT,
+    BRATS2024_SOURCE_MANIFEST_DEFAULT,
+    BRATS2024_STANDARDIZED_DEFAULT_ROOT,
     BRAIN_STRUCTURE_DEFAULT_ROOT,
     BRAIN_STRUCTURE_SOURCE_MANIFEST_DEFAULT,
     BRAIN_STRUCTURE_STANDARDIZED_DEFAULT_ROOT,
@@ -18,6 +27,7 @@ from .constants import (
     REMIND_MASKS_DEFAULT_ROOT,
     REMIND_SOURCE_MANIFEST_DEFAULT,
     REMIND_STANDARDIZED_DEFAULT_ROOT,
+    STANDARDIZED_DATASET_DEFAULT_ROOT,
     STANDARDIZED_TASK_MANIFESTS_DEFAULT_ROOT,
     UCSD_PTGBM_DEFAULT_ROOT,
     UCSD_PTGBM_SOURCE_MANIFEST_DEFAULT,
@@ -42,8 +52,12 @@ from .io import read_csv_rows
 from .pathing import resolve_existing_path, resolve_target_path
 from .preprocess import (
     materialize_classification_manifest,
+    materialize_segmentation_manifest,
     preflight_synthstrip_requirements,
 )
+from .registry import get_brats2020_adapter
+from .registry import get_brats2023_adapter
+from .registry import get_brats2024_adapter
 from .registry import get_brain_structure_adapter
 from .registry import get_cfb_gbm_adapter
 from .registry import get_remind_adapter
@@ -121,6 +135,81 @@ def build_parser() -> argparse.ArgumentParser:
         "--skip-image-validation",
         action="store_true",
         help="Skip NIfTI nonzero-brain validation.",
+    )
+
+    brats2020 = subparsers.add_parser(
+        "build-brats2020-manifest",
+        help="Build standardized manifest by crawling BraTS 2020 patient folders.",
+    )
+    brats2020.add_argument(
+        "--brats2020-root",
+        default=BRATS2020_DEFAULT_ROOT,
+        help="BraTS 2020 root. Windows paths like Z:\\dataset\\BraTS2020_TrainingData\\MICCAI_BraTS2020_TrainingData accepted.",
+    )
+    brats2020.add_argument(
+        "--output-csv",
+        default=BRATS2020_SOURCE_MANIFEST_DEFAULT,
+        help="Destination CSV for standardized rows.",
+    )
+    brats2020.add_argument(
+        "--include-excluded",
+        action="store_true",
+        help="Keep excluded rows in output with exclude_reason populated.",
+    )
+    brats2020.add_argument(
+        "--skip-image-validation",
+        action="store_true",
+        help="Skip NIfTI nonzero-volume validation.",
+    )
+
+    brats2023 = subparsers.add_parser(
+        "build-brats2023-manifest",
+        help="Build standardized manifest by crawling BraTS 2023 patient folders.",
+    )
+    brats2023.add_argument(
+        "--brats2023-root",
+        default=BRATS2023_DEFAULT_ROOT,
+        help="BraTS 2023 root. Windows paths like Z:\\dataset\\brats2023\\ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData accepted.",
+    )
+    brats2023.add_argument(
+        "--output-csv",
+        default=BRATS2023_SOURCE_MANIFEST_DEFAULT,
+        help="Destination CSV for standardized rows.",
+    )
+    brats2023.add_argument(
+        "--include-excluded",
+        action="store_true",
+        help="Keep excluded rows in output with exclude_reason populated.",
+    )
+    brats2023.add_argument(
+        "--skip-image-validation",
+        action="store_true",
+        help="Skip NIfTI nonzero-volume validation.",
+    )
+
+    brats2024 = subparsers.add_parser(
+        "build-brats2024-manifest",
+        help="Build standardized manifest by crawling BraTS 2024 patient folders.",
+    )
+    brats2024.add_argument(
+        "--brats2024-root",
+        default=BRATS2024_DEFAULT_ROOT,
+        help="BraTS 2024 root. Windows paths like Z:\\dataset\\brats2024\\BraTS2024_small_dataset accepted.",
+    )
+    brats2024.add_argument(
+        "--output-csv",
+        default=BRATS2024_SOURCE_MANIFEST_DEFAULT,
+        help="Destination CSV for standardized rows.",
+    )
+    brats2024.add_argument(
+        "--include-excluded",
+        action="store_true",
+        help="Keep excluded rows in output with exclude_reason populated.",
+    )
+    brats2024.add_argument(
+        "--skip-image-validation",
+        action="store_true",
+        help="Skip NIfTI nonzero-volume validation.",
     )
 
     cfb_gbm = subparsers.add_parser(
@@ -348,6 +437,96 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional manifest path pointing at materialized cls outputs. Defaults inside output dir.",
     )
     preprocess_brain_structure.add_argument(
+        "--synthstrip-cmd",
+        default="mri_synthstrip",
+        help="External SynthStrip command to use for skull-on classification datasets.",
+    )
+
+    preprocess_brats2020 = subparsers.add_parser(
+        "preprocess-brats2020-cls",
+        help="Materialize cls/t1_128.nii.gz outputs for BraTS 2020 classification rows in manifest.",
+    )
+    preprocess_brats2020.add_argument(
+        "--input-manifest",
+        required=True,
+        help="Standardized manifest CSV containing BraTS 2020 rows.",
+    )
+    preprocess_brats2020.add_argument(
+        "--output-dir",
+        default=BRATS2020_STANDARDIZED_DEFAULT_ROOT,
+        help="Root directory where <global_case_id>/cls outputs are written.",
+    )
+    preprocess_brats2020.add_argument(
+        "--skip-mask",
+        action="store_true",
+        help="Do not write cls/brain_mask_128.nii.gz.",
+    )
+    preprocess_brats2020.add_argument(
+        "--output-manifest",
+        default=None,
+        help="Optional manifest path pointing at materialized cls outputs. Defaults inside output dir.",
+    )
+    preprocess_brats2020.add_argument(
+        "--synthstrip-cmd",
+        default="mri_synthstrip",
+        help="External SynthStrip command to use for skull-on classification datasets.",
+    )
+
+    preprocess_brats2023 = subparsers.add_parser(
+        "preprocess-brats2023-cls",
+        help="Materialize cls/t1_128.nii.gz outputs for BraTS 2023 classification rows in manifest.",
+    )
+    preprocess_brats2023.add_argument(
+        "--input-manifest",
+        required=True,
+        help="Standardized manifest CSV containing BraTS 2023 rows.",
+    )
+    preprocess_brats2023.add_argument(
+        "--output-dir",
+        default=BRATS2023_STANDARDIZED_DEFAULT_ROOT,
+        help="Root directory where <global_case_id>/cls outputs are written.",
+    )
+    preprocess_brats2023.add_argument(
+        "--skip-mask",
+        action="store_true",
+        help="Do not write cls/brain_mask_128.nii.gz.",
+    )
+    preprocess_brats2023.add_argument(
+        "--output-manifest",
+        default=None,
+        help="Optional manifest path pointing at materialized cls outputs. Defaults inside output dir.",
+    )
+    preprocess_brats2023.add_argument(
+        "--synthstrip-cmd",
+        default="mri_synthstrip",
+        help="External SynthStrip command to use for skull-on classification datasets.",
+    )
+
+    preprocess_brats2024 = subparsers.add_parser(
+        "preprocess-brats2024-cls",
+        help="Materialize cls/t1_128.nii.gz outputs for BraTS 2024 classification rows in manifest.",
+    )
+    preprocess_brats2024.add_argument(
+        "--input-manifest",
+        required=True,
+        help="Standardized manifest CSV containing BraTS 2024 rows.",
+    )
+    preprocess_brats2024.add_argument(
+        "--output-dir",
+        default=BRATS2024_STANDARDIZED_DEFAULT_ROOT,
+        help="Root directory where <global_case_id>/cls outputs are written.",
+    )
+    preprocess_brats2024.add_argument(
+        "--skip-mask",
+        action="store_true",
+        help="Do not write cls/brain_mask_128.nii.gz.",
+    )
+    preprocess_brats2024.add_argument(
+        "--output-manifest",
+        default=None,
+        help="Optional manifest path pointing at materialized cls outputs. Defaults inside output dir.",
+    )
+    preprocess_brats2024.add_argument(
         "--synthstrip-cmd",
         default="mri_synthstrip",
         help="External SynthStrip command to use for skull-on classification datasets.",
@@ -613,6 +792,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also write optional classification_t1_any_unhealthy_vs_healthy.csv.",
     )
 
+    preprocess_segmentation_native = subparsers.add_parser(
+        "materialize-segmentation-native",
+        help="Convert native-scale segmentation image/mask pairs into `.nii.gz` standardized layout.",
+    )
+    preprocess_segmentation_native.add_argument(
+        "--input-manifest",
+        required=True,
+        help="Standardized manifest CSV containing segmentation rows.",
+    )
+    preprocess_segmentation_native.add_argument(
+        "--output-dir",
+        default=rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\segmentation_native",
+        help="Root directory where <global_case_id>/seg outputs are written.",
+    )
+    preprocess_segmentation_native.add_argument(
+        "--output-manifest",
+        default=None,
+        help="Optional manifest path pointing at materialized seg outputs. Defaults inside output dir.",
+    )
+    preprocess_segmentation_native.add_argument(
+        "--synthstrip-cmd",
+        default="mri_synthstrip",
+        help="External SynthStrip command to use for segmentation datasets that require skull stripping.",
+    )
+
     return parser
 
 
@@ -638,6 +842,69 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
         print(
             f"Wrote {len(records)} brain-structure rows to {output_csv}",
+            flush=True,
+        )
+        return
+
+    if args.command == "build-brats2020-manifest":
+        output_csv = resolve_target_path(
+            args.output_csv,
+            default=BRATS2020_SOURCE_MANIFEST_DEFAULT,
+        )
+        adapter = get_brats2020_adapter(args.brats2020_root)
+        print(
+            f"Scanning BraTS 2020 root: {adapter.root}",
+            flush=True,
+        )
+        records = adapter.write_manifest(
+            output_csv,
+            include_excluded=args.include_excluded,
+            validate_images=not args.skip_image_validation,
+        )
+        print(
+            f"Wrote {len(records)} BraTS 2020 rows to {output_csv}",
+            flush=True,
+        )
+        return
+
+    if args.command == "build-brats2023-manifest":
+        output_csv = resolve_target_path(
+            args.output_csv,
+            default=BRATS2023_SOURCE_MANIFEST_DEFAULT,
+        )
+        adapter = get_brats2023_adapter(args.brats2023_root)
+        print(
+            f"Scanning BraTS 2023 root: {adapter.root}",
+            flush=True,
+        )
+        records = adapter.write_manifest(
+            output_csv,
+            include_excluded=args.include_excluded,
+            validate_images=not args.skip_image_validation,
+        )
+        print(
+            f"Wrote {len(records)} BraTS 2023 rows to {output_csv}",
+            flush=True,
+        )
+        return
+
+    if args.command == "build-brats2024-manifest":
+        output_csv = resolve_target_path(
+            args.output_csv,
+            default=BRATS2024_SOURCE_MANIFEST_DEFAULT,
+        )
+        adapter = get_brats2024_adapter(args.brats2024_root)
+        print(
+            f"Scanning BraTS 2024 root: {adapter.root}",
+            flush=True,
+        )
+        records = adapter.write_manifest(
+            output_csv,
+            include_excluded=args.include_excluded,
+            validate_images=not args.skip_image_validation,
+        )
+        print(
+            f"Wrote {len(records)} BraTS 2024 rows to {output_csv}",
             flush=True,
         )
         return
@@ -839,8 +1106,49 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
         return
 
+    if args.command == "materialize-segmentation-native":
+        try:
+            input_manifest = resolve_existing_path(args.input_manifest)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                _missing_manifest_message(args.input_manifest, exc)
+            ) from exc
+        output_dir = resolve_target_path(
+            args.output_dir,
+            default=rf"{STANDARDIZED_DATASET_DEFAULT_ROOT}\segmentation_native",
+        )
+        output_manifest = None
+        if args.output_manifest:
+            output_manifest = resolve_target_path(
+                args.output_manifest,
+                default=args.output_manifest,
+            )
+        print(
+            f"Reading manifest: {input_manifest}",
+            flush=True,
+        )
+        print(
+            f"Writing native segmentation dataset to: {output_dir}",
+            flush=True,
+        )
+        rows = read_csv_rows(input_manifest)
+        materialized_rows, manifest_path = materialize_segmentation_manifest(
+            rows,
+            output_dir,
+            output_manifest_path=output_manifest,
+            synthstrip_cmd=args.synthstrip_cmd,
+        )
+        print(
+            f"Wrote {len(materialized_rows)} segmentation pairs and manifest to {manifest_path}",
+            flush=True,
+        )
+        return
+
     if args.command in {
         "preprocess-brain-structure-cls",
+        "preprocess-brats2020-cls",
+        "preprocess-brats2023-cls",
+        "preprocess-brats2024-cls",
         "preprocess-cfb-gbm-cls",
         "preprocess-upenn-gbm-cls",
         "preprocess-ucsf-pdgm-cls",
@@ -860,28 +1168,40 @@ def main(argv: Sequence[str] | None = None) -> None:
             BRAIN_STRUCTURE_STANDARDIZED_DEFAULT_ROOT
             if args.command == "preprocess-brain-structure-cls"
             else (
-                CFB_GBM_STANDARDIZED_DEFAULT_ROOT
-                if args.command == "preprocess-cfb-gbm-cls"
+                BRATS2020_STANDARDIZED_DEFAULT_ROOT
+                if args.command == "preprocess-brats2020-cls"
                 else (
-                    UPENN_GBM_STANDARDIZED_DEFAULT_ROOT
-                    if args.command == "preprocess-upenn-gbm-cls"
+                    BRATS2023_STANDARDIZED_DEFAULT_ROOT
+                    if args.command == "preprocess-brats2023-cls"
                     else (
-                        UCSF_PDGM_STANDARDIZED_DEFAULT_ROOT
-                        if args.command == "preprocess-ucsf-pdgm-cls"
+                        BRATS2024_STANDARDIZED_DEFAULT_ROOT
+                        if args.command == "preprocess-brats2024-cls"
                         else (
-                            UCSD_PTGBM_STANDARDIZED_DEFAULT_ROOT
-                            if args.command == "preprocess-ucsd-ptgbm-cls"
+                            CFB_GBM_STANDARDIZED_DEFAULT_ROOT
+                            if args.command == "preprocess-cfb-gbm-cls"
                             else (
-                                UTSW_GLIOMA_STANDARDIZED_DEFAULT_ROOT
-                                if args.command == "preprocess-utsw-glioma-cls"
+                                UPENN_GBM_STANDARDIZED_DEFAULT_ROOT
+                                if args.command == "preprocess-upenn-gbm-cls"
                                 else (
-                                    REMIND_STANDARDIZED_DEFAULT_ROOT
-                                    if args.command == "preprocess-remind-cls"
+                                    UCSF_PDGM_STANDARDIZED_DEFAULT_ROOT
+                                    if args.command == "preprocess-ucsf-pdgm-cls"
                                     else (
-                                        YALE_BRAIN_METS_LONGITUDINAL_STANDARDIZED_DEFAULT_ROOT
-                                        if args.command
-                                        == "preprocess-yale-brain-mets-longitudinal-cls"
-                                        else VESTIBULAR_SCHWANNOMA_MC_RC2_STANDARDIZED_DEFAULT_ROOT
+                                        UCSD_PTGBM_STANDARDIZED_DEFAULT_ROOT
+                                        if args.command == "preprocess-ucsd-ptgbm-cls"
+                                        else (
+                                            UTSW_GLIOMA_STANDARDIZED_DEFAULT_ROOT
+                                            if args.command == "preprocess-utsw-glioma-cls"
+                                            else (
+                                                REMIND_STANDARDIZED_DEFAULT_ROOT
+                                                if args.command == "preprocess-remind-cls"
+                                                else (
+                                                    YALE_BRAIN_METS_LONGITUDINAL_STANDARDIZED_DEFAULT_ROOT
+                                                    if args.command
+                                                    == "preprocess-yale-brain-mets-longitudinal-cls"
+                                                    else VESTIBULAR_SCHWANNOMA_MC_RC2_STANDARDIZED_DEFAULT_ROOT
+                                                )
+                                            )
+                                        )
                                     )
                                 )
                             )

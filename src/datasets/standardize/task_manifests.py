@@ -9,6 +9,7 @@ from typing import Callable
 from .constants import BRAIN_STRUCTURE_DATASET_KEY
 from .io import write_csv_rows
 from .models import standardized_manifest_fieldnames
+from .registry import get_dataset_registry_entry
 
 TASK_MANIFEST_FIELDNAMES = [
     "task_name",
@@ -34,6 +35,23 @@ def _has_real_t1(row: dict[str, object]) -> bool:
 
 def _is_brain_structure(row: dict[str, object]) -> bool:
     return _text(row.get("dataset_key")) == BRAIN_STRUCTURE_DATASET_KEY
+
+
+def _has_brain_mask(row: dict[str, object]) -> bool:
+    if _text(row.get("brain_mask_path")):
+        return True
+    if _text(row.get("normalization_mask_method")) == "synthstrip":
+        return True
+
+    dataset_key = _text(row.get("dataset_key"))
+    if not dataset_key:
+        return False
+
+    try:
+        registry_entry = get_dataset_registry_entry(dataset_key)
+    except KeyError:
+        return False
+    return registry_entry.cls_skullstrip_policy == "synthstrip"
 
 
 def _is_healthy_brain_structure(row: dict[str, object]) -> bool:
@@ -182,7 +200,7 @@ def build_classification_t1_any_unhealthy_vs_healthy(
 def build_segmentation_binary_curated(
     rows: list[dict[str, object]],
 ) -> list[dict[str, str]]:
-    """Curated lesion-mask segmentation manifest, excluding brain-structure."""
+    """Curated lesion-mask segmentation manifest, excluding brain-mask sources."""
 
     return [
         _task_row(
@@ -199,6 +217,7 @@ def build_segmentation_binary_curated(
         for row in rows
         if not _is_excluded(row)
         and not _is_brain_structure(row)
+        and not _has_brain_mask(row)
         and _text(row.get("task_type")) == "segmentation"
         and _text(row.get("mask_path"))
         and _text(row.get("mask_tier")) == "curated"
@@ -208,7 +227,7 @@ def build_segmentation_binary_curated(
 def build_segmentation_binary_broad(
     rows: list[dict[str, object]],
 ) -> list[dict[str, str]]:
-    """Broader lesion-mask segmentation manifest, excluding brain-structure."""
+    """Broader lesion-mask segmentation manifest, excluding brain-mask sources."""
 
     return [
         _task_row(
@@ -225,6 +244,7 @@ def build_segmentation_binary_broad(
         for row in rows
         if not _is_excluded(row)
         and not _is_brain_structure(row)
+        and not _has_brain_mask(row)
         and _text(row.get("task_type")) == "segmentation"
         and _text(row.get("mask_path"))
         and _text(row.get("mask_tier"))

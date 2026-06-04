@@ -1,0 +1,90 @@
+Resolved 114 packages in 2ms
+Checked 104 packages in 2.59s
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.5.0) or chardet (7.0.1)/charset_normalizer (3.4.3) doesn't match a supported version!
+  warnings.warn(
+<frozen importlib._bootstrap_external>:1325: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+wandb: [wandb.login()] Using explicit session credentials for https://api.wandb.ai.
+wandb: Appending key for api.wandb.ai to your netrc file: /cluster/home/eldarja/.netrc
+wandb: W&B API key is configured. Use `wandb login --relogin` to force relogin
+wandb: setting up run w0c7q4jt
+wandb: Tracking run with wandb version 0.25.0
+wandb: Run data is saved locally in /cluster/home/eldarja/CancerVision/wandb/run-20260320_174214-w0c7q4jt
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run vivid-blaze-25
+wandb: ⭐️ View project at https://wandb.ai/cancervision/cancervision
+wandb: 🚀 View run at https://wandb.ai/cancervision/cancervision/runs/w0c7q4jt
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/utils/data/dataloader.py:424: UserWarning: This DataLoader will create 2 worker processes in total. Our suggested max number of worker in current system is 1, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  self.check_worker_number_rationality()
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/utils/data/dataloader.py:432: UserWarning: This DataLoader will create 2 worker processes in total. Our suggested max number of worker in current system is 1, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  self.check_worker_number_rationality()
+Traceback (most recent call last):
+  File "/cluster/home/eldarja/CancerVision/main.py", line 4, in <module>
+    train_brats.main()
+    ~~~~~~~~~~~~~~~~^^
+  File "/cluster/home/eldarja/CancerVision/src/models/train_brats.py", line 379, in main
+    outputs = model(inputs)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/monai/networks/nets/unet.py", line 297, in forward
+    x = self.model(x)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/monai/networks/blocks/convolutions.py", line 317, in forward
+    cx: torch.Tensor = self.conv(x)  # apply x to sequence of operations
+                       ~~~~~~~~~^^^
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/modules/dropout.py", line 73, in forward
+    return F.dropout(input, self.p, self.training, self.inplace)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/functional.py", line 1435, in dropout
+    return handle_torch_function(
+        dropout, (input,), input, p=p, training=training, inplace=inplace
+    )
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/overrides.py", line 1763, in handle_torch_function
+    result = torch_func_method(public_api, types, args, kwargs)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/monai/data/meta_tensor.py", line 283, in __torch_function__
+    ret = super().__torch_function__(func, types, args, kwargs)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/_tensor.py", line 1703, in __torch_function__
+    ret = func(*args, **kwargs)
+  File "/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/nn/functional.py", line 1441, in dropout
+    _VF.dropout_(input, p, training) if inplace else _VF.dropout(input, p, training)
+                                                     ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB. GPU 0 has a total capacity of 15.77 GiB of which 1.88 GiB is free. Including non-PyTorch memory, this process has 13.88 GiB memory in use. Of the allocated memory 13.52 GiB is allocated by PyTorch, and 7.62 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

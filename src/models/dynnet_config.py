@@ -1,0 +1,387 @@
+"""Configuration and CLI helpers for the DynUNet trainer."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Sequence
+
+from dotenv import load_dotenv
+from monai.transforms import Compose
+
+from src.datasets import default_brats_data_dir
+
+load_dotenv()
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_DATA_DIR = default_brats_data_dir(REPO_ROOT)
+DEFAULT_CANCERVISION_DATASET_ROOT = (
+    REPO_ROOT / "res" / "dataset" / "cancervision-standardized"
+)
+DEFAULT_CANCERVISION_TASK_MANIFEST = (
+    DEFAULT_CANCERVISION_DATASET_ROOT
+    / "segmentation_native"
+    / "segmentation_materialized_manifest.csv"
+)
+DEFAULT_SAVE_DIR = REPO_ROOT / "res" / "models"
+WANDB_PROJECT = (os.getenv("WANDB_PROJECT", "cancervision") or "cancervision").strip()
+WANDB_ENTITY = (os.getenv("WANDB_ENTITY") or "").strip() or None
+DEFAULT_ROI_SIZE = (96, 96, 96)
+DEFAULT_NUM_SAMPLES = 1
+DEFAULT_VAL_SW_BATCH_SIZE = 1
+
+
+@dataclass(frozen=True)
+class DatasetConfig:
+    name: str
+    in_channels: int
+    out_channels: int
+    metric_names: tuple[str, ...]
+    train_transform_builder: Callable[[Sequence[int], int, float, float], Compose]
+    val_transform_builder: Callable[[], Compose]
+
+
+@dataclass(frozen=True)
+class GpuProfileConfig:
+    name: str
+    roi_size: tuple[int, int, int]
+    num_samples: int
+    model_filters: tuple[int, int, int, int, int]
+    val_sw_batch_size: int = DEFAULT_VAL_SW_BATCH_SIZE
+
+
+GPU_PROFILE_CONFIGS: dict[str, GpuProfileConfig] = {
+    "gpu16g": GpuProfileConfig(
+        name="gpu16g",
+        roi_size=(64, 64, 64),
+        num_samples=1,
+        model_filters=(16, 32, 64, 128, 192),
+    ),
+    "gpu32g": GpuProfileConfig(
+        name="gpu32g",
+        roi_size=(80, 80, 80),
+        num_samples=1,
+        model_filters=(24, 48, 96, 192, 256),
+    ),
+    "gpu40g": GpuProfileConfig(
+        name="gpu40g",
+        roi_size=DEFAULT_ROI_SIZE,
+        num_samples=DEFAULT_NUM_SAMPLES,
+        model_filters=(32, 64, 128, 256, 320),
+    ),
+    "gpu80g": GpuProfileConfig(
+        name="gpu80g",
+        roi_size=(128, 128, 128),
+        num_samples=1,
+        model_filters=(32, 64, 128, 256, 320),
+    ),
+}
+DEFAULT_GPU_PROFILE_NAME = "gpu40g"
+GPU_PROFILE_ALIASES = {
+    "p100": "gpu16g",
+    "v100": "gpu32g",
+    "a100": "gpu40g",
+    "gpu16g": "gpu16g",
+    "gpu32g": "gpu32g",
+    "gpu40g": "gpu40g",
+    "gpu80g": "gpu80g",
+    "sxm4": "gpu80g",
+}
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Train a MONAI DynUNet on BraTS 2020/2023/2024 volumes or "
+            "CancerVision standardized segmentation task manifests"
+        )
+    )
+    parser.add_argument(
+        "--gpu-profile",
+        choices=("auto", *GPU_PROFILE_CONFIGS.keys(), "p100", "v100", "a100", "sxm4"),
+        default="auto",
+        help=(
+            "Memory preset for DynUNet training. `auto` uses Slurm constraints or "
+            "detected GPU memory."
+        ),
+    )
+    parser.add_argument(
+        "--dataset-source",
+        choices=("brats", "cancervision_binary_seg"),
+        default="brats",
+        help="Input pipeline to use: raw BraTS folders or CancerVision segmentation task manifest.",
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        default=os.path.normpath(str(DEFAULT_DATA_DIR)),
+        help="Path to BraTS 2020/2023/2024 root containing patient dirs.",
+    )
+    parser.add_argument(
+        "--task-manifest",
+        type=str,
+        default=os.path.normpath(str(DEFAULT_CANCERVISION_TASK_MANIFEST)),
+        help=(
+            "Path to CancerVision segmentation task manifest CSV. Used when "
+            "--dataset-source=cancervision_binary_seg."
+        ),
+    )
+    parser.add_argument(
+        "--path-prefix-map",
+        action="append",
+        default=[],
+        metavar="FROM=TO",
+        help=(
+            "Optional manifest path remap applied before file resolution. "
+            "Repeat for multiple mappings."
+        ),
+    )
+    parser.add_argument(
+        "--save-dir",
+        type=str,
+        default=os.path.normpath(str(DEFAULT_SAVE_DIR)),
+        help="Directory where run folders and checkpoints are saved",
+    )
+    parser.add_argument(
+        "--max-epochs", type=int, default=100, help="Number of training epochs"
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=1, help="Training batch size per process"
+    )
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument(
+        "--weight-decay", type=float, default=1e-5, help="Weight decay"
+    )
+    parser.add_argument(
+        "--val-interval", type=int, default=1, help="Validate every N epochs"
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=4,
+        help="DataLoader workers per process",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=0, help="Random seed for reproducibility"
+    )
+    parser.add_argument(
+        "--test-size",
+        type=float,
+        default=0.2,
+        help="Fraction of patients reserved for validation",
+    )
+    parser.add_argument(
+        "--roi-size",
+        type=int,
+        nargs=3,
+        default=None,
+        help="Random crop ROI size as three integers",
+    )
+    parser.add_argument(
+        "--num-samples",
+        type=int,
+        default=None,
+        help="Number of random crops per volume per iteration",
+    )
+    parser.add_argument(
+        "--crop-pos-weight",
+        type=float,
+        default=1.0,
+        help="Relative weight for foreground-centered random crops.",
+    )
+    parser.add_argument(
+        "--crop-neg-weight",
+        type=float,
+        default=1.0,
+        help="Relative weight for background-centered random crops.",
+    )
+    parser.add_argument(
+        "--model-filters",
+        type=int,
+        nargs=5,
+        default=None,
+        help="DynUNet filter widths for downsample levels.",
+    )
+    parser.add_argument(
+        "--train-micro-batch-size",
+        type=int,
+        default=1,
+        help=(
+            "Maximum samples/crops per optimizer micro-step after MONAI collation. "
+            "Use 1 to reduce CUDA memory pressure for 3D volumes."
+        ),
+    )
+    parser.add_argument(
+        "--amp",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable CUDA AMP during training and validation",
+    )
+    parser.add_argument(
+        "--val-sw-batch-size",
+        type=int,
+        default=None,
+        help="Sliding-window batch size used during validation inference",
+    )
+    parser.add_argument(
+        "--loss",
+        choices=("dice", "dicece", "dicefocal", "tversky"),
+        default="dice",
+        help="Segmentation loss used for optimization.",
+    )
+    parser.add_argument(
+        "--dicece-lambda-dice",
+        type=float,
+        default=0.7,
+        help="Dice term weight when --loss=dicece or --loss=dicefocal.",
+    )
+    parser.add_argument(
+        "--dicece-lambda-ce",
+        type=float,
+        default=0.3,
+        help="Cross-entropy term weight when --loss=dicece.",
+    )
+    parser.add_argument(
+        "--dicefocal-lambda-focal",
+        type=float,
+        default=1.0,
+        help="Focal term weight when --loss=dicefocal.",
+    )
+    parser.add_argument(
+        "--focal-gamma",
+        type=float,
+        default=2.0,
+        help="Focal loss gamma when --loss=dicefocal.",
+    )
+    parser.add_argument(
+        "--tversky-alpha",
+        type=float,
+        default=0.3,
+        help="Tversky alpha (false-positive weight) when --loss=tversky.",
+    )
+    parser.add_argument(
+        "--tversky-beta",
+        type=float,
+        default=0.7,
+        help="Tversky beta (false-negative weight) when --loss=tversky.",
+    )
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        default=0.0,
+        help="DynUNet dropout probability (0 disables).",
+    )
+    parser.add_argument(
+        "--deep-supervision",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable DynUNet deep supervision (loss summed across decoder scales).",
+    )
+    parser.add_argument(
+        "--deep-supr-num",
+        type=int,
+        default=2,
+        help="Number of additional deep-supervision heads (>=1).",
+    )
+    parser.add_argument(
+        "--val-thresholds",
+        type=float,
+        nargs="+",
+        default=None,
+        help="Optional sigmoid thresholds to sweep during validation.",
+    )
+    parser.add_argument(
+        "--min-epochs",
+        type=int,
+        default=0,
+        help="Minimum epochs before early stopping can trigger.",
+    )
+    parser.add_argument(
+        "--early-stop-patience",
+        type=int,
+        default=0,
+        help="Stop after this many validations without improvement; 0 disables early stopping.",
+    )
+    parser.add_argument(
+        "--wandb-mode",
+        choices=("online", "offline", "disabled"),
+        default="online",
+        help="Weights & Biases logging mode",
+    )
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Optional checkpoint path to resume from",
+    )
+    parser.add_argument(
+        "--run-name",
+        type=str,
+        default=None,
+        help="Optional run name; defaults to a Slurm-aware generated name",
+    )
+    return parser.parse_args(argv)
+
+
+def build_run_name(args: argparse.Namespace) -> str:
+    if args.run_name:
+        return args.run_name
+    job_id = os.environ.get("SLURM_JOB_ID")
+    run_prefix = (
+        "dynunet-cancervision"
+        if args.dataset_source == "cancervision_binary_seg"
+        else "dynunet-brats"
+    )
+    if job_id:
+        return f"{run_prefix}-{job_id}"
+    return f"{run_prefix}-{time.strftime('%Y%m%d-%H%M%S')}"
+
+
+def validate_args(args: argparse.Namespace) -> None:
+    if args.train_micro_batch_size < 1:
+        raise ValueError("--train-micro-batch-size must be at least 1")
+    if args.val_sw_batch_size < 1:
+        raise ValueError("--val-sw-batch-size must be at least 1")
+    if args.num_samples < 1:
+        raise ValueError("--num-samples must be at least 1")
+    if args.crop_pos_weight <= 0:
+        raise ValueError("--crop-pos-weight must be greater than 0")
+    if args.crop_neg_weight <= 0:
+        raise ValueError("--crop-neg-weight must be greater than 0")
+    if len(args.roi_size) != 3 or any(size < 16 for size in args.roi_size):
+        raise ValueError("--roi-size must contain three integers >= 16")
+    if len(args.model_filters) != 5 or any(width < 8 for width in args.model_filters):
+        raise ValueError("--model-filters must contain five integers >= 8")
+    if args.dicece_lambda_dice < 0:
+        raise ValueError("--dicece-lambda-dice must be non-negative")
+    if args.dicece_lambda_ce < 0:
+        raise ValueError("--dicece-lambda-ce must be non-negative")
+    if args.loss == "dicece" and (args.dicece_lambda_dice + args.dicece_lambda_ce) <= 0:
+        raise ValueError("DiceCE loss requires a positive sum of lambda weights")
+    if args.dicefocal_lambda_focal < 0:
+        raise ValueError("--dicefocal-lambda-focal must be non-negative")
+    if args.focal_gamma < 0:
+        raise ValueError("--focal-gamma must be non-negative")
+    if args.loss == "dicefocal" and (args.dicece_lambda_dice + args.dicefocal_lambda_focal) <= 0:
+        raise ValueError("DiceFocal loss requires a positive sum of dice + focal weights")
+    if args.loss == "tversky":
+        if args.tversky_alpha <= 0 or args.tversky_beta <= 0:
+            raise ValueError("--tversky-alpha and --tversky-beta must be > 0")
+    if not 0.0 <= args.dropout < 1.0:
+        raise ValueError("--dropout must be in [0, 1)")
+    if args.deep_supervision and args.deep_supr_num < 1:
+        raise ValueError("--deep-supr-num must be >= 1 when --deep-supervision is enabled")
+    if args.val_thresholds is not None:
+        if not args.val_thresholds:
+            raise ValueError("--val-thresholds must include at least one value")
+        if any(threshold < 0 or threshold > 1 for threshold in args.val_thresholds):
+            raise ValueError("--val-thresholds values must be between 0 and 1")
+    if args.min_epochs < 0:
+        raise ValueError("--min-epochs must be non-negative")
+    if args.early_stop_patience < 0:
+        raise ValueError("--early-stop-patience must be non-negative")
+    if args.min_epochs > args.max_epochs:
+        raise ValueError("--min-epochs cannot exceed --max-epochs")

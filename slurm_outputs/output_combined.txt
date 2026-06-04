@@ -1,0 +1,9 @@
+Running from this directory: /cluster/home/eldarja/CancerVision
+Name of job: Cancer Vision UNet 2D
+ID of job: 24158722
+The job was run on these nodes: idun-09-05
+uv 0.10.10
+uv version: 
+Synced with remote repository
+CUDA is available. Using GPU.
+Job finished

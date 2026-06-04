@@ -1,0 +1,33 @@
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.5.0) or chardet (7.0.1)/charset_normalizer (3.4.3) doesn't match a supported version!
+  warnings.warn(
+<frozen importlib._bootstrap_external>:1325: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet.py", line 150, in <module>
+    main()
+    ~~~~^^
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet_train.py", line 526, in main
+    train_dicts, val_dicts, test_dicts = build_dataset_splits(args)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet_data.py", line 477, in build_dataset_splits
+    train_dicts, val_dicts, test_dicts = build_cancervision_segmentation_splits(
+                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        task_manifest,
+        ^^^^^^^^^^^^^^
+        path_prefix_maps=args.path_prefix_map,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet_data.py", line 315, in build_cancervision_segmentation_splits
+    image_path = _resolve_manifest_data_path(
+        row["image_path"],
+    ...<3 lines>...
+        path_prefix_maps=path_prefix_maps,
+    )
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet_data.py", line 262, in _resolve_manifest_data_path
+    raise FileNotFoundError(
+        f"Missing {field_name} for manifest case '{case_id}'. Checked: {joined_candidates}"
+    )
+FileNotFoundError: Missing image_path for manifest case 'brats2023__BraTS-GLI-00008-001__baseline__seg'. Checked: /cluster/home/eldarja/CancerVision/res/dataset/brats2023/ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData/BraTS-GLI-00008-001/BraTS-GLI-00008-001-t1c.nii
+srun: error: idun-07-07: task 0: Exited with exit code 1

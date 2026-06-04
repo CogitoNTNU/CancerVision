@@ -8,6 +8,8 @@ import re
 from typing import Literal
 
 from .adapters import (
+    BraTSAdapter,
+    BraTSDatasetSpec,
     CfbGbmAdapter,
     BrainStructureAdapter,
     RemindAdapter,
@@ -22,6 +24,18 @@ from .constants import (
     CFB_GBM_DATASET_KEY,
     CFB_GBM_DEFAULT_ROOT,
     CFB_GBM_PREPROC_PROFILE,
+    BRATS2020_DATASET_KEY,
+    BRATS2020_DEFAULT_ROOT,
+    BRATS2020_PREPROC_PROFILE,
+    BRATS2020_SEG_PREPROC_PROFILE,
+    BRATS2023_DATASET_KEY,
+    BRATS2023_DEFAULT_ROOT,
+    BRATS2023_PREPROC_PROFILE,
+    BRATS2023_SEG_PREPROC_PROFILE,
+    BRATS2024_DATASET_KEY,
+    BRATS2024_DEFAULT_ROOT,
+    BRATS2024_PREPROC_PROFILE,
+    BRATS2024_SEG_PREPROC_PROFILE,
     BRAIN_STRUCTURE_DATASET_KEY,
     BRAIN_STRUCTURE_DEFAULT_ROOT,
     BRAIN_STRUCTURE_PREPROC_PROFILE,
@@ -71,6 +85,24 @@ def normalize_dataset_key(dataset_key: str) -> str:
 
 
 STANDARDIZE_DATASET_REGISTRY = {
+    BRATS2020_DATASET_KEY: DatasetRegistryEntry(
+        key=BRATS2020_DATASET_KEY,
+        default_root=BRATS2020_DEFAULT_ROOT,
+        preproc_profile=BRATS2020_PREPROC_PROFILE,
+        cls_skullstrip_policy="skip",
+    ),
+    BRATS2023_DATASET_KEY: DatasetRegistryEntry(
+        key=BRATS2023_DATASET_KEY,
+        default_root=BRATS2023_DEFAULT_ROOT,
+        preproc_profile=BRATS2023_PREPROC_PROFILE,
+        cls_skullstrip_policy="skip",
+    ),
+    BRATS2024_DATASET_KEY: DatasetRegistryEntry(
+        key=BRATS2024_DATASET_KEY,
+        default_root=BRATS2024_DEFAULT_ROOT,
+        preproc_profile=BRATS2024_PREPROC_PROFILE,
+        cls_skullstrip_policy="skip",
+    ),
     CFB_GBM_DATASET_KEY: DatasetRegistryEntry(
         key=CFB_GBM_DATASET_KEY,
         default_root=CFB_GBM_DEFAULT_ROOT,
@@ -149,6 +181,72 @@ def get_brain_structure_adapter(
 
     resolved_root = resolve_dataset_root(root, default=BRAIN_STRUCTURE_DEFAULT_ROOT)
     return BrainStructureAdapter(resolved_root, metadata_filename=metadata_filename)
+
+
+def _get_brats_adapter(
+    root: str | Path | None,
+    *,
+    dataset_key: str,
+    default_root: str,
+    source_study: str,
+    classification_preproc_profile: str,
+    segmentation_preproc_profile: str,
+) -> BraTSAdapter:
+    resolved_root = resolve_dataset_root(root, default=default_root)
+    return BraTSAdapter(
+        resolved_root,
+        spec=BraTSDatasetSpec(
+            dataset_key=dataset_key,
+            source_study=source_study,
+            classification_preproc_profile=classification_preproc_profile,
+            segmentation_preproc_profile=segmentation_preproc_profile,
+        ),
+    )
+
+
+def get_brats2020_adapter(
+    root: str | Path | None = None,
+) -> BraTSAdapter:
+    """Create BraTS 2020 adapter with default root fallback and path support."""
+
+    return _get_brats_adapter(
+        root,
+        dataset_key=BRATS2020_DATASET_KEY,
+        default_root=BRATS2020_DEFAULT_ROOT,
+        source_study="BraTS2020",
+        classification_preproc_profile=BRATS2020_PREPROC_PROFILE,
+        segmentation_preproc_profile=BRATS2020_SEG_PREPROC_PROFILE,
+    )
+
+
+def get_brats2023_adapter(
+    root: str | Path | None = None,
+) -> BraTSAdapter:
+    """Create BraTS 2023 adapter with default root fallback and path support."""
+
+    return _get_brats_adapter(
+        root,
+        dataset_key=BRATS2023_DATASET_KEY,
+        default_root=BRATS2023_DEFAULT_ROOT,
+        source_study="BraTS2023",
+        classification_preproc_profile=BRATS2023_PREPROC_PROFILE,
+        segmentation_preproc_profile=BRATS2023_SEG_PREPROC_PROFILE,
+    )
+
+
+def get_brats2024_adapter(
+    root: str | Path | None = None,
+) -> BraTSAdapter:
+    """Create BraTS 2024 adapter with default root fallback and path support."""
+
+    return _get_brats_adapter(
+        root,
+        dataset_key=BRATS2024_DATASET_KEY,
+        default_root=BRATS2024_DEFAULT_ROOT,
+        source_study="BraTS2024",
+        classification_preproc_profile=BRATS2024_PREPROC_PROFILE,
+        segmentation_preproc_profile=BRATS2024_SEG_PREPROC_PROFILE,
+    )
 
 
 def get_cfb_gbm_adapter(

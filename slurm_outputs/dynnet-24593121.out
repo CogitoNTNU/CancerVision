@@ -1,0 +1,44 @@
+Running from: /cluster/home/eldarja/CancerVision
+Job name: dynnet
+Job id: 24593121
+Node list: idun-07-06
+Constraint: unset
+Python runner: uv run --no-sync python
+CUDA_VISIBLE_DEVICES=0
+GPU profile: gpu40g
+Dataset source: cancervision_binary_seg
+W&B mode: online
+W&B project: cancervision
+W&B entity: cancervision
+Train micro-batch size: 1
+Validation sw_batch_size: 1
+Num samples: 4
+Loss: dicefocal
+DiceCE lambdas: dice=1.0 ce=0.3
+DiceFocal: dice=1.0 focal=1.0 gamma=2.0
+Tversky: alpha=0.3 beta=0.7
+Dropout: 0.0
+Deep supervision: true (deep_supr_num=2)
+Crop weights: pos=3 neg=1
+Val thresholds: 0.20 0.25 0.30 0.35 0.40 0.45 0.50 0.55 0.60 0.65 0.70 0.75
+Early stop: min_epochs=50 patience=40
+Wed May 27 02:58:32 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 575.57.08              Driver Version: 575.57.08      CUDA Version: 12.9     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100-PCIE-40GB          On  |   00000000:C0:00.0 Off |                    0 |
+| N/A   33C    P0             34W /  250W |       0MiB /  40960MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+

@@ -87,9 +87,29 @@ For example: OS version, programs, libraries, etc.
    uv run pre-commit install
    ```
 
+## Datasets
+
+This project leverages several brain imaging datasets for model training and validation:
+
+- Juvekar, P., Dorent, R., Kögl, F., Torio, E., Barr, C., Rigolo, L., Galvin, C., Jowkar, N., Kazi, A., Haouchine, N., Cheema, H., Navab, N., Pieper, S., Wells, W. M., Bi, W. L., Golby, A., Frisken, S., & Kapur, T. (2023). The Brain Resection Multimodal Imaging Database (ReMIND) (Version 1) [dataset]. The Cancer Imaging Archive. https://doi.org/10.7937/3RAG-D070
+
+- Calabrese, E., Villanueva-Meyer, J., Rudie, J., Rauschecker, A., Baid, U., Bakas, S., Cha, S., Mongan, J., Hess, C. (2022). The University of California San Francisco Preoperative Diffuse Glioma MRI (UCSF-PDGM) (Version 5) [dataset]. The Cancer Imaging Archive. https://doi.org/10.7937/tcia.bdgf-8v37
+
+- Moreau, N. N., Leclercq, A. G., Desmonts, A., Poirier, Y., Dubru, A., Guillemette, L., Lecoeur, P., Lemasson, K., Jaudet, C., Brunaud, C., Valable, S., Geffrelot, J., Stefan, D., Leleu, T., Raboutet, C., Le Henaff, L., Batalla, A., Lacroix, J., Rouzier, R., & Corroyer-Dulmont, A. (2025). Pre and post treatment MRI and radiotherapy plans of patients with glioblastoma: the CFB-GBM cohort (CFB-GBM) (Version 2) [Data set]. The Cancer Imaging Archive. https://doi.org/10.7937/V9PN-2F72
+
+- Gagnon, L., Gupta, D., Mastorakos, G., White, N., Goodwill, V., McDonald, C., Beaumont, T., Conlin, C., Seibert, T., Nguyen, U., Hattangadi-Gluth, J., Kesari, S., Schulte, J., Piccioni, D., Schmainda, K., Farid, N., Dale, A., Rudie, J. (2025). The University of California San Diego annotated post-treatment high-grade glioma multimodal MRI dataset (UCSD-PTGBM) (Version 3) [dataset]. The Cancer Imaging Archive. https://doi.org/10.7937/fwv2-dt74
+
+- Reddy, D., Saadat, N., Holcomb, J., Wagner, B., Truong, N., Bowerman, J., Hatanpaa, K., Patel, T., Pinho, M., Yu, F., Zhang, K., Lodhi, S., Madhuranthakam, A., Bangalore Yogananda, C. G., & Maldjian, J. (2026). The University of Texas Southwestern Glioma MRI dataset with molecular marker characterization and segmentations (UTSW-Glioma) (Version 1) [Data set]. The Cancer Imaging Archive. https://doi.org/10.7937/DFAE-1B86
+
+- Chadha, S., Weiss, D., Janas, A., Ramakrishnan, D., Hager, T., Osenberg, K., Willms, K., Zhu, J., Chiang, V., Bakas, S., Maleki, N., Sritharan, D. V., Schoenherr, S., Westerhoff, M., Zawalich, M., Davis, M., Malhotra, A., Bousabarah, K., Deusch, C., Lin, M., Aneja, S., & Aboian, M. S. (2025). Yale longitudinal dataset of brain metastases on MRI with associated clinical data (Yale-Brain-Mets-Longitudinal) (Version 1) [Data set]. The Cancer Imaging Archive. https://doi.org/10.7937/3YAT-E768
+
+- Bakas, S., Sako, C., Akbari, H., Bilello, M., Sotiras, A., Shukla, G., Rudie, J. D., Flores Santamaria, N., Fathi Kazerooni, A., Pati, S., Rathore, S., Mamourian, E., Ha, S. M., Parker, W., Doshi, J., Baid, U., Bergman, M., Binder, Z. A., Verma, R., … Davatzikos, C. (2021). Multi-parametric magnetic resonance imaging (mpMRI) scans for de novo Glioblastoma (GBM) patients from the University of Pennsylvania Health System (UPENN-GBM) (Version 2) [Data set]. The Cancer Imaging Archive. https://doi.org/10.7937/TCIA.709X-DN49
+
+- Shapey, J., Kujawa, A., Dorent, R., Wang, G., Bisdas, S., Dimitriadis, A., Grishchuck, D., Paddick, I., Kitchen, N., Bradford, R., Saeed, S., Ourselin, S., & Vercauteren, T. (2021). Segmentation of Vestibular Schwannoma from Magnetic Resonance Imaging: An Open Annotated Dataset and Baseline Algorithm (version 2) [Data set]. The Cancer Imaging Archive. https://doi.org/10.7937/TCIA.9YTJ-5Q73
+
 ## Usage
 
-To run the project, run the following command from the root directory of the project:
+Local CancerVision training from repo root:
 
 ```bash
 uv run python -m src.training.train --experiment-id dynunet_brats_baseline
@@ -145,6 +165,29 @@ uv run python -m src.classification.classify \
 ```
 
 Classifier definitions live in `res/classification/classifier_registry.json`.
+uv run python -m src.models.dynnet \
+  --dataset-source cancervision_binary_seg \
+  --task-manifest res/dataset/cancervision-standardized/task_manifests/segmentation_binary_curated.csv
+```
+
+Canonical SLURM launch:
+
+```bash
+sbatch --account=<account> --constraint=gpu40g scripts/train_dynnet.sbatch
+# or
+sbatch --account=<account> --constraint=gpu80g scripts/train_dynnet.sbatch
+```
+
+Trainer now uses one batch script and auto-detects GPU profile from Slurm constraints. Old split scripts like `clean_slurm*.slurm` and `run_slurm.slurm` are removed. To run raw BraTS folders instead of CancerVision manifests, submit with `DATASET_SOURCE=brats` and `DATA_DIR=/path/to/brats/root`.
+
+If one manifest must work across local and cluster path layouts, remap prefixes at runtime:
+
+```bash
+uv run python -m src.models.dynnet \
+  --dataset-source cancervision_binary_seg \
+  --task-manifest res/dataset/cancervision-standardized/task_manifests/segmentation_binary_broad.csv \
+  --path-prefix-map 'Z:\dataset\cancervision-standardized=/cluster/home/eldarja/CancerVision/res/dataset/cancervision-standardized'
+```
 
 ### Generate Documentation Site
 

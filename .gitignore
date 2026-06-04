@@ -258,7 +258,7 @@ Thumbs.db
 
 # Training dataset
 res/dataset/*
-
+res/*
 # Inference outputs
 res/predictions/
 res/classification/reports/

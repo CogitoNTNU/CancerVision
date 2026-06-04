@@ -21,6 +21,8 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
     "python-multipart>=0.0.9",
+    "pydicom>=3.0.2",
+    "imageio>=2.37.3",
 ]
 
 [tool.uv.sources]

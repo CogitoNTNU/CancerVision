@@ -13,9 +13,12 @@ from .model_registry import ModelSpec
 
 ModelBuilder = Callable[[], torch.nn.Module]
 
+# (in_channels, out_channels, input_modalities, output_labels)
+ArchitectureIO = tuple[int, int, tuple[str, ...], tuple[str, ...]]
 
 _ARCHITECTURE_BUILDERS: dict[str, ModelBuilder] = {
     "dynunet_brats_v1": build_dynunet_model,
+    "dynunet_cancervision_v1": lambda: build_dynunet_model(in_channels=1, out_channels=1),
     "unet_brats_v1": lambda: UNet(
         spatial_dims=3,
         in_channels=4,
@@ -25,6 +28,13 @@ _ARCHITECTURE_BUILDERS: dict[str, ModelBuilder] = {
         num_res_units=2,
         norm="INSTANCE",
     ),
+}
+
+# Per-architecture I/O metadata used by the inference runtime.
+_ARCHITECTURE_IO: dict[str, ArchitectureIO] = {
+    "dynunet_brats_v1": (4, 3, ("flair", "t1", "t1ce", "t2"), ("tc", "wt", "et")),
+    "dynunet_cancervision_v1": (1, 1, ("image",), ("tumor",)),
+    "unet_brats_v1": (4, 3, ("flair", "t1", "t1ce", "t2"), ("tc", "wt", "et")),
 }
 
 

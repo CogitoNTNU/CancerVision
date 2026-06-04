@@ -130,6 +130,16 @@
     resultSummary.innerHTML = "";
     const submitted = (payload.submitted_modalities || []).join(", ") || "(none)";
     const filled = (payload.filled_modalities || []).join(", ") || "(none)";
+    const counts = payload.label_counts;
+    const voxelRows =
+      counts.tumor_voxels !== undefined
+        ? [["Tumor voxels", counts.tumor_voxels.toLocaleString()]]
+        : [
+            ["Tumor core voxels", counts.tc_voxels.toLocaleString()],
+            ["Whole tumor voxels", counts.wt_voxels.toLocaleString()],
+            ["Enhancing voxels", counts.et_voxels.toLocaleString()],
+          ];
+
     const rows = [
       ["Architecture", payload.architecture],
       ["Device", payload.device],
@@ -138,9 +148,7 @@
       ["Submitted modalities", submitted],
       ["Auto-filled modalities", filled],
       ["Output file", payload.output_filename],
-      ["Tumor core voxels", payload.label_counts.tc_voxels.toLocaleString()],
-      ["Whole tumor voxels", payload.label_counts.wt_voxels.toLocaleString()],
-      ["Enhancing voxels", payload.label_counts.et_voxels.toLocaleString()],
+      ...voxelRows,
     ];
 
     if (
@@ -163,6 +171,8 @@
     resultEl.hidden = false;
   }
 
+  const PREFERRED_DEFAULT_ARCH = "dynunet_cancervision_v1";
+
   async function loadArchitectures() {
     try {
       const response = await fetch("/api/architectures");
@@ -180,6 +190,9 @@
         option.value = "";
         option.textContent = "(no architectures registered)";
         architectureSelect.appendChild(option);
+      }
+      if (architectures.includes(PREFERRED_DEFAULT_ARCH)) {
+        architectureSelect.value = PREFERRED_DEFAULT_ARCH;
       }
     } catch (err) {
       setStatus(`Failed to load architectures: ${err.message}`, "error");

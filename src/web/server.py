@@ -12,7 +12,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.inference.architectures import _ARCHITECTURE_BUILDERS
+from src.inference.architectures import _ARCHITECTURE_BUILDERS, _ARCHITECTURE_IO
 from src.inference.model_registry import resolve_repo_root
 
 from .inference_runtime import (
@@ -114,8 +114,15 @@ def create_app() -> FastAPI:
                     job_dir / f"case_{modality_name}{_extension(upload.filename)}",
                 )
 
+            arch_in_channels = _ARCHITECTURE_IO.get(architecture, (4,))[0]
             fallback_path = next(iter(saved_modalities.values()))
-            modality_paths = [saved_modalities.get(modality, fallback_path) for modality in MODALITY_ORDER]
+            if arch_in_channels == 1:
+                modality_paths = [fallback_path]
+            else:
+                modality_paths = [
+                    saved_modalities.get(modality, fallback_path)
+                    for modality in MODALITY_ORDER
+                ]
 
             try:
                 torch_device = resolve_device(device)

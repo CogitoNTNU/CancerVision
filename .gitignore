@@ -258,7 +258,8 @@ Thumbs.db
 
 # Training dataset
 res/dataset/*
-res/*
+res/picture_sets/*
+
 # Inference outputs
 res/predictions/
 res/classification/reports/

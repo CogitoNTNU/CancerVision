@@ -219,6 +219,7 @@ def load_weights_with_fallbacks(
 
     candidate_prefixes = ("", "module.", "model.", "model.module.", "net.", "network.")
     errors: list[str] = []
+    lenient_loaded = False
 
     for prefix in candidate_prefixes:
         candidate = loaded_state_dict if not prefix else _strip_prefix(loaded_state_dict, prefix)
@@ -234,9 +235,17 @@ def load_weights_with_fallbacks(
                 f"prefix='{prefix or '<none>'}': "
                 f"{missing_count} missing keys, {unexpected_count} unexpected keys"
             )
+            if missing_count == 0 and not lenient_loaded:
+                # All model keys matched; extra checkpoint keys (e.g. deep-supervision
+                # training heads) are safe to drop.  The strict=False call above already
+                # populated the model weights, so just record the match.
+                lenient_loaded = True
         except RuntimeError as exc:
             error_message = str(exc).split("\n", maxsplit=1)[0]
             errors.append(f"prefix='{prefix or '<none>'}': {error_message}")
+
+    if lenient_loaded:
+        return
 
     details = " | ".join(errors)
     raise ValueError(

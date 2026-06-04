@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from monai.inferers import sliding_window_inference
 
-from src.inference.architectures import _ARCHITECTURE_BUILDERS, build_model_for_spec
+from src.inference.architectures import _ARCHITECTURE_BUILDERS, _ARCHITECTURE_IO, build_model_for_spec
 from src.inference.model_registry import (
     ModelSpec,
     load_checkpoint_state_dict,
@@ -37,13 +37,14 @@ def resolve_device(name: str) -> torch.device:
     return torch.device("cpu")
 
 
+_DEFAULT_IO = (4, 3, ("flair", "t1", "t1ce", "t2"), ("tc", "wt", "et"))
+
+
 def build_model_from_weights(
     architecture: str,
     checkpoint_path: Path,
     device: torch.device,
     *,
-    in_channels: int = 4,
-    out_channels: int = 3,
     roi_size: tuple[int, int, int] = (128, 128, 128),
     sw_batch_size: int = 4,
     overlap: float = 0.5,
@@ -59,16 +60,21 @@ def build_model_from_weights(
 
     errors: list[str] = []
     for candidate_architecture in architectures_to_try:
+        in_ch, out_ch, input_mods, output_labels = _ARCHITECTURE_IO.get(
+            candidate_architecture, _DEFAULT_IO
+        )
         spec = ModelSpec(
             model_id="user_upload",
             architecture=candidate_architecture,
             checkpoint=checkpoint_path,
-            in_channels=in_channels,
-            out_channels=out_channels,
+            in_channels=in_ch,
+            out_channels=out_ch,
             roi_size=roi_size,
             sw_batch_size=sw_batch_size,
             overlap=overlap,
             threshold=threshold,
+            input_modalities=input_mods,
+            output_labels=output_labels,
         )
 
         model = build_model_for_spec(spec)
@@ -103,6 +109,17 @@ def infer_architecture_from_state_dict(
     keys = tuple(state_dict.keys())
 
     if any(key.startswith("input_block.") for key in keys):
+        # Distinguish brats (in_channels=4) from cancervision (in_channels=1)
+        # by inspecting the first convolution weight in the input block.
+        for key in keys:
+            if key.startswith("input_block.") and key.endswith(".weight"):
+                weight = state_dict[key]
+                if weight.dim() >= 2:
+                    return (
+                        "dynunet_cancervision_v1"
+                        if weight.shape[1] == 1
+                        else "dynunet_brats_v1"
+                    )
         return "dynunet_brats_v1"
 
     if any(key.startswith("model.") for key in keys) and any(
@@ -163,6 +180,8 @@ def infer_from_files(
     inputs, reference = _load_and_stack(modality_files)
     inputs = inputs.to(device, non_blocking=device.type == "cuda")
 
+    effective_threshold = spec.threshold if threshold is None else threshold
+
     logits = sliding_window_inference(
         inputs,
         roi_size=spec.roi_size,
@@ -170,20 +189,32 @@ def infer_from_files(
         predictor=model,
         overlap=spec.overlap,
     )
-    probabilities = torch.sigmoid(logits[0]).cpu()
-    label_map = channels_to_brats_labels(
-        probabilities,
-        threshold=spec.threshold if threshold is None else threshold,
-    )
+    # Handle deep-supervision output: shape (B, num_heads, C, *spatial) → take head 0.
+    raw = logits[0]
+    if raw.dim() == 5:
+        # raw is (C, H, W, D) — standard single-head output
+        probabilities = torch.sigmoid(raw).cpu()
+    else:
+        # raw is (num_heads, C, H, W, D) — deep supervision; take the main head
+        probabilities = torch.sigmoid(raw[0]).cpu()
+
+    if spec.out_channels == 1:
+        label_map = (probabilities[0] > effective_threshold).numpy().astype(np.uint8)
+        label_counts: dict[str, int] = {
+            "background_voxels": int(np.sum(label_map == 0)),
+            "tumor_voxels": int(np.sum(label_map == 1)),
+        }
+    else:
+        label_map = channels_to_brats_labels(probabilities, threshold=effective_threshold)
+        label_counts = {
+            "background_voxels": int(np.sum(label_map == 0)),
+            "tc_voxels": int(np.sum(label_map == 1)),
+            "wt_voxels": int(np.sum(label_map == 2)),
+            "et_voxels": int(np.sum(label_map == 4)),
+        }
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     prediction_image = nib.Nifti1Image(label_map.astype(np.uint8), reference.affine)
     nib.save(prediction_image, str(output_path))
 
-    label_counts = {
-        "background_voxels": int(np.sum(label_map == 0)),
-        "tc_voxels": int(np.sum(label_map == 1)),
-        "wt_voxels": int(np.sum(label_map == 2)),
-        "et_voxels": int(np.sum(label_map == 4)),
-    }
     return output_path, label_counts

@@ -1,0 +1,50 @@
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.5.0) or chardet (7.0.1)/charset_normalizer (3.4.3) doesn't match a supported version!
+  warnings.warn(
+<frozen importlib._bootstrap_external>:1325: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/cuda/__init__.py:371: UserWarning: Found GPU0 Tesla P100-PCIE-16GB which is of compute capability (CC) 6.0.
+The following list shows the CCs this version of PyTorch was built for and the hardware CCs it supports:
+- 7.5 which supports hardware CC >=7.5,<8.0
+- 8.0 which supports hardware CC >=8.0,<9.0 except {8.7}
+- 8.6 which supports hardware CC >=8.6,<9.0 except {8.7}
+- 9.0 which supports hardware CC >=9.0,<10.0
+- 10.0 which supports hardware CC >=10.0,<11.0 except {10.1}
+- 12.0 which supports hardware CC >=12.0,<13.0
+- 12.0 which supports hardware CC >=12.0,<13.0
+Please follow the instructions at https://pytorch.org/get-started/locally/ to install a PyTorch release that supports one of these CUDA versions: 12.6
+  _warn_unsupported_code(d, device_cc, code_ccs)
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/torch/cuda/__init__.py:489: UserWarning: 
+Tesla P100-PCIE-16GB with CUDA capability sm_60 is not compatible with the current PyTorch installation.
+The current PyTorch install supports CUDA capabilities sm_75 sm_80 sm_86 sm_90 sm_100 sm_120 compute_120.
+If you want to use the Tesla P100-PCIE-16GB GPU with PyTorch, please check the instructions at https://pytorch.org/get-started/locally/
+
+  queued_call()
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet.py", line 150, in <module>
+    main()
+    ~~~~^^
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet_train.py", line 526, in main
+    train_dicts, val_dicts, test_dicts = build_dataset_splits(args)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet_data.py", line 421, in build_dataset_splits
+    train_dicts, val_dicts, test_dicts = build_cancervision_segmentation_splits(
+                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        task_manifest,
+        ^^^^^^^^^^^^^^
+        path_prefix_maps=args.path_prefix_map,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet_data.py", line 259, in build_cancervision_segmentation_splits
+    image_path = _resolve_manifest_data_path(
+        row["image_path"],
+    ...<3 lines>...
+        path_prefix_maps=path_prefix_maps,
+    )
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet_data.py", line 206, in _resolve_manifest_data_path
+    raise FileNotFoundError(
+        f"Missing {field_name} for manifest case '{case_id}'. Checked: {joined_candidates}"
+    )
+FileNotFoundError: Missing image_path for manifest case 'brats2020__BraTS20_Training_001__baseline__seg'. Checked: Z:\dataset\brats2020\BraTS2020_TrainingData\MICCAI_BraTS2020_TrainingData\BraTS20_Training_001\BraTS20_Training_001_t1ce.nii
+srun: error: idun-11-02: task 0: Exited with exit code 1

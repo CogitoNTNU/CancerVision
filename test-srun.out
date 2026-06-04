@@ -1,0 +1,34 @@
+Running from this directory: /cluster/home/eldarja/CancerVision
+Name of job: Cancer Vision UNet 3D
+ID of job: 24191637
+The job was run on these nodes: idun-07-03
+MONAI version: 1.5.2
+Numpy version: 2.4.2
+Pytorch version: 2.10.0+cu128
+MONAI flags: HAS_EXT = False, USE_COMPILED = False, USE_META_DICT = False
+MONAI rev id: d18565fb3e4fd8c556707f91ac280a2dc3f681c1
+MONAI __file__: /cluster/home/<username>/CancerVision/.venv/lib/python3.13/site-packages/monai/__init__.py
+
+Optional dependencies:
+Pytorch Ignite version: NOT INSTALLED or UNKNOWN VERSION.
+ITK version: NOT INSTALLED or UNKNOWN VERSION.
+Nibabel version: 5.4.0
+scikit-image version: NOT INSTALLED or UNKNOWN VERSION.
+scipy version: 1.17.1
+Pillow version: 12.1.1
+Tensorboard version: NOT INSTALLED or UNKNOWN VERSION.
+gdown version: NOT INSTALLED or UNKNOWN VERSION.
+TorchVision version: 0.25.0+cu128
+tqdm version: 4.67.3
+lmdb version: NOT INSTALLED or UNKNOWN VERSION.
+psutil version: NOT INSTALLED or UNKNOWN VERSION.
+pandas version: NOT INSTALLED or UNKNOWN VERSION.
+einops version: NOT INSTALLED or UNKNOWN VERSION.
+transformers version: NOT INSTALLED or UNKNOWN VERSION.
+mlflow version: NOT INSTALLED or UNKNOWN VERSION.
+pynrrd version: NOT INSTALLED or UNKNOWN VERSION.
+clearml version: NOT INSTALLED or UNKNOWN VERSION.
+
+For details about installing the optional dependencies, please visit:
+    https://docs.monai.io/en/latest/installation.html#installing-the-recommended-dependencies
+

@@ -1,0 +1,91 @@
+Running from: /cluster/home/eldarja/CancerVision
+Job name: dynnet
+Job id: 24371527
+Node list: idun-07-05
+Constraint: unset
+Python runner: uv run --no-sync python
+CUDA_VISIBLE_DEVICES=0
+GPU profile: gpu40g
+Dataset source: cancervision_binary_seg
+W&B mode: online
+W&B project: cancervision
+W&B entity: cancervision
+Train micro-batch size: 1
+Validation sw_batch_size: 1
+Num samples: 2
+Loss: dicece
+DiceCE lambdas: dice=0.7 ce=0.3
+Crop weights: pos=3 neg=1
+Val thresholds: 0.30 0.35 0.40 0.45 0.50 0.55 0.60
+Early stop: min_epochs=50 patience=20
+Wed May 13 02:31:02 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 575.57.08              Driver Version: 575.57.08      CUDA Version: 12.9     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100-PCIE-40GB          On  |   00000000:13:00.0 Off |                    0 |
+| N/A   29C    P0             31W /  250W |       0MiB /  40960MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+MONAI version: 1.5.2
+Numpy version: 2.4.2
+Pytorch version: 2.11.0+cu129
+MONAI flags: HAS_EXT = False, USE_COMPILED = False, USE_META_DICT = False
+MONAI rev id: d18565fb3e4fd8c556707f91ac280a2dc3f681c1
+MONAI __file__: /cluster/home/<username>/CancerVision/.venv/lib/python3.13/site-packages/monai/__init__.py
+
+Optional dependencies:
+Pytorch Ignite version: NOT INSTALLED or UNKNOWN VERSION.
+ITK version: NOT INSTALLED or UNKNOWN VERSION.
+Nibabel version: 5.4.0
+scikit-image version: NOT INSTALLED or UNKNOWN VERSION.
+scipy version: 1.17.1
+Pillow version: 12.1.1
+Tensorboard version: NOT INSTALLED or UNKNOWN VERSION.
+gdown version: NOT INSTALLED or UNKNOWN VERSION.
+TorchVision version: 0.26.0+cu129
+tqdm version: 4.67.3
+lmdb version: NOT INSTALLED or UNKNOWN VERSION.
+psutil version: NOT INSTALLED or UNKNOWN VERSION.
+pandas version: NOT INSTALLED or UNKNOWN VERSION.
+einops version: NOT INSTALLED or UNKNOWN VERSION.
+transformers version: NOT INSTALLED or UNKNOWN VERSION.
+mlflow version: NOT INSTALLED or UNKNOWN VERSION.
+pynrrd version: 1.1.3
+clearml version: NOT INSTALLED or UNKNOWN VERSION.
+
+For details about installing the optional dependencies, please visit:
+    https://docs.monai.io/en/latest/installation.html#installing-the-recommended-dependencies
+
+Using device: cuda:0
+Distributed: False (world_size=1)
+GPU profile    : gpu40g
+Run directory: /cluster/home/eldarja/CancerVision/res/models/dynnet-cancervision_binary_seg-24371527
+Dataset source : cancervision_binary_seg
+Applying auto-inferred path prefixes to manifest paths: ['Z:\\dataset\\cancervision-standardized=/cluster/home/eldarja/CancerVision/res/dataset/cancervision-standardized', 'Z:\\dataset\\brats2020=/cluster/home/eldarja/CancerVision/res/dataset', 'Z:\\\\dataset=/cluster/home/eldarja/CancerVision/res/dataset']
+Task manifest  : /cluster/home/eldarja/CancerVision/res/dataset/cancervision-standardized/task_manifests/segmentation_binary_curated.csv
+Exists         : True
+Path remaps    : ['Z:\\dataset\\cancervision-standardized=/cluster/home/eldarja/CancerVision/res/dataset/cancervision-standardized', 'Z:\\dataset\\brats2020=/cluster/home/eldarja/CancerVision/res/dataset', 'Z:\\\\dataset=/cluster/home/eldarja/CancerVision/res/dataset']
+Train micro-batch size: 1
+Validation sw_batch_size: 1
+ROI size       : (96, 96, 96)
+Num samples    : 2
+Model filters  : (32, 64, 128, 256, 320)
+Crop weights   : pos=3.00 neg=1.00
+Loss           : dicece
+Loss lambdas   : dice=0.70 ce=0.30
+Val thresholds : (0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6)
+Min epochs     : 50
+Early patience : 20
+Applying auto-inferred path prefixes to manifest paths: ['Z:\\dataset\\cancervision-standardized=/cluster/home/eldarja/CancerVision/res/dataset/cancervision-standardized', 'Z:\\dataset\\brats2020=/cluster/home/eldarja/CancerVision/res/dataset', 'Z:\\\\dataset=/cluster/home/eldarja/CancerVision/res/dataset']

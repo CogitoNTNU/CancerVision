@@ -1,0 +1,38 @@
+Running from this directory: /cluster/home/eldarja/CancerVision
+Name of job: dynunet-cancervision-native
+ID of job: 24319501
+The job was run on these nodes: idun-07-09
+Single-task launch only
+Python: /cluster/home/eldarja/CancerVision/.venv/bin/python
+CUDA_VISIBLE_DEVICES=0
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+Sun Apr 19 05:03:07 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 575.57.08              Driver Version: 575.57.08      CUDA Version: 12.9     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100 80GB PCIe          On  |   00000000:89:00.0 Off |                    0 |
+| N/A   36C    P0             42W /  300W |       0MiB /  81920MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Detected GPU memory (MiB): 81920
+GPU profile: gpu80g
+ROI size: 144 144 144
+Model filters: 32 64 128 256 320
+Batch size: 1
+Train micro-batch size: 1
+Num samples: 1
+Validation sw_batch_size: 1
+Num workers: 8
+Task manifest: /cluster/home/eldarja/CancerVision/res/dataset/cancervision-standardization/task_manifests/segmentation_binary_curated.csv

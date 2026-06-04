@@ -1,0 +1,42 @@
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.5.0) or chardet (7.0.1)/charset_normalizer (3.4.3) doesn't match a supported version!
+  warnings.warn(
+<frozen importlib._bootstrap_external>:1325: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+/cluster/home/eldarja/CancerVision/src/models/dynnet_data.py:477: UserWarning: Excluded 158 CancerVision segmentation rows with image/mask shape mismatches from /cluster/home/eldarja/CancerVision/res/dataset/cancervision-standardized/segmentation_native/segmentation_materialized_manifest.csv. By dataset: {'utsw_glioma': 158}.
+  train_dicts, val_dicts, test_dicts = build_cancervision_segmentation_splits(
+wandb: Tracking run with wandb version 0.25.0
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /cluster/home/eldarja/CancerVision/wandb/offline-run-20260523_161528-abuwj5g5
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/monai/inferers/utils.py:231: UserWarning: Using a non-tuple sequence for multidimensional indexing is deprecated and will be changed in pytorch 2.9; use x[tuple(seq)] instead of x[seq]. In pytorch 2.9 this will be interpreted as tensor index, x[torch.tensor(seq)], which will result either in an error or a different result (Triggered internally at /pytorch/torch/csrc/autograd/python_variable_indexing.cpp:347.)
+  win_data = inputs[unravel_slice[0]].to(sw_device)
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/monai/inferers/utils.py:370: UserWarning: Using a non-tuple sequence for multidimensional indexing is deprecated and will be changed in pytorch 2.9; use x[tuple(seq)] instead of x[seq]. In pytorch 2.9 this will be interpreted as tensor index, x[torch.tensor(seq)], which will result either in an error or a different result (Triggered internally at /pytorch/torch/csrc/autograd/python_variable_indexing.cpp:347.)
+  out[idx_zm] += p
+wandb: 
+wandb: Run history:
+wandb:                          epoch ▁▁▁▁▁▂▂▂▂▂▂▃▃▃▃▃▃▃▄▄▅▅▅▅▅▅▅▅▅▆▆▆▆▇▇▇▇▇██
+wandb:                     train/loss █▅▄▃▃▃▂▂▂▂▂▂▂▂▂▂▂▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:                       train/lr ██████████▇▇▇▇▇▇▇▇▆▆▆▆▆▅▅▅▅▅▄▄▄▄▃▃▃▂▂▂▂▁
+wandb:                  val/best_dice ▁▁▂▂▂▃▃▃▃▄▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆███████████████
+wandb:             val/best_threshold ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:                val/dice_lesion ▁▁▂▂▂▁▁▂▄▄▆▄▅▆▅▆▅▅▅▅▅▅▆█▅▆▅▅▆▅▅█▇▇█▆▇▇█▆
+wandb: val/dice_lesion_threshold_0_30 ▁▂▂▂▂▁▂▂▃▄▆▄▃▄▅▅▄▄▄▄▄▅▅▇▄▅▅▅▅▄▅██▆█▆██▇▆
+wandb: val/dice_lesion_threshold_0_35 ▁▁▂▂▂▃▁▂▂▃▅▄▆▄▃▄▅▅▅▄▅▆▄▅▅▆▅▅▅▄▅██▆█▆███▆
+wandb: val/dice_lesion_threshold_0_40 ▁▁▂▂▂▃▂▂▃▄▆▄▃▄▅▅▅▅▄▅▆▄▅█▄▅▅▅▅▄▅██▇█▆███▆
+wandb: val/dice_lesion_threshold_0_45 ▁▂▂▂▂▁▂▂▃▄▄▆▄▃▄▅▅▅▅▄▅▆▄▅▅▆▆▅▅▅▃▅██▇▆▆██▆
+wandb:                            +13 ...
+wandb: 
+wandb: Run summary:
+wandb:                          epoch 51
+wandb:                     train/loss 0.36554
+wandb:                       train/lr 8e-05
+wandb:                  val/best_dice 0.67602
+wandb:             val/best_threshold 0.6
+wandb:                val/dice_lesion 0.58308
+wandb: val/dice_lesion_threshold_0_30 0.43022
+wandb: val/dice_lesion_threshold_0_35 0.45787
+wandb: val/dice_lesion_threshold_0_40 0.48443
+wandb: val/dice_lesion_threshold_0_45 0.51041
+wandb:                            +13 ...
+wandb: 
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /cluster/home/eldarja/CancerVision/wandb/offline-run-20260523_161528-abuwj5g5
+wandb: Find logs at: ./wandb/offline-run-20260523_161528-abuwj5g5/logs

@@ -1,0 +1,21 @@
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.5.0) or chardet (7.0.1)/charset_normalizer (3.4.3) doesn't match a supported version!
+  warnings.warn(
+<frozen importlib._bootstrap_external>:1325: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+usage: dynnet.py [-h]
+                 [--gpu-profile {auto,gpu16g,gpu32g,gpu40g,gpu80g,p100,v100,a100,sxm4}]
+                 [--dataset-source {brats,cancervision_binary_seg}]
+                 [--data-dir DATA_DIR] [--task-manifest TASK_MANIFEST]
+                 [--path-prefix-map FROM=TO] [--save-dir SAVE_DIR]
+                 [--max-epochs MAX_EPOCHS] [--batch-size BATCH_SIZE] [--lr LR]
+                 [--weight-decay WEIGHT_DECAY] [--val-interval VAL_INTERVAL]
+                 [--num-workers NUM_WORKERS] [--seed SEED]
+                 [--test-size TEST_SIZE]
+                 [--roi-size ROI_SIZE ROI_SIZE ROI_SIZE]
+                 [--num-samples NUM_SAMPLES]
+                 [--model-filters MODEL_FILTERS MODEL_FILTERS MODEL_FILTERS MODEL_FILTERS MODEL_FILTERS]
+                 [--train-micro-batch-size TRAIN_MICRO_BATCH_SIZE]
+                 [--amp | --no-amp] [--val-sw-batch-size VAL_SW_BATCH_SIZE]
+                 [--wandb-mode {online,offline,disabled}] [--resume RESUME]
+                 [--run-name RUN_NAME]
+dynnet.py: error: argument --wandb-mode: invalid choice: 'online\r' (choose from online, offline, disabled)
+srun: error: idun-08-01: task 0: Exited with exit code 2

@@ -15,7 +15,7 @@
 #SBATCH --constraint=gpu40g
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=24:00:00
+#SBATCH --time=00:01:00
 #SBATCH --output=slurm_outputs/%x-%j.out
 #SBATCH --error=slurm_outputs/%x-%j.err
 #SBATCH --mail-type=FAIL

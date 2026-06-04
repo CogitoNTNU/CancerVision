@@ -1,0 +1,24 @@
+/cluster/home/eldarja/CancerVision/.venv/lib/python3.13/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.5.0) or chardet (7.0.1)/charset_normalizer (3.4.3) doesn't match a supported version!
+  warnings.warn(
+<frozen importlib._bootstrap_external>:1325: FutureWarning: The cuda.cudart module is deprecated and will be removed in a future release, please switch to use the cuda.bindings.runtime module instead.
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet.py", line 26, in <module>
+    from src.models.dynnet_data import (
+    ...<8 lines>...
+    )
+  File "/cluster/home/eldarja/CancerVision/src/models/dynnet_data.py", line 30, in <module>
+    from src.datasets.standardize.pathing import resolve_existing_path
+  File "/cluster/home/eldarja/CancerVision/src/datasets/standardize/__init__.py", line 3, in <module>
+    from .adapters import (
+    ...<22 lines>...
+    )
+  File "/cluster/home/eldarja/CancerVision/src/datasets/standardize/adapters/__init__.py", line 6, in <module>
+    from .remind import (
+    ...<3 lines>...
+    )
+  File "/cluster/home/eldarja/CancerVision/src/datasets/standardize/adapters/remind.py", line 9, in <module>
+    import pydicom
+ModuleNotFoundError: No module named 'pydicom'
+srun: error: idun-01-03: task 0: Exited with exit code 1

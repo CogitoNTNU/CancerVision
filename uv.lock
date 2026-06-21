@@ -119,7 +119,7 @@ requires-dist = [
     { name = "imageio", specifier = ">=2.37.3" },
     { name = "matplotlib", specifier = ">=3.10.8" },
     { name = "monai" },
-    { name = "nibabel", specifier = ">=5.4.0" },
+    { name = "nibabel", specifier = ">=5.4.2" },
     { name = "numpy" },
     { name = "onnxruntime", specifier = ">=1.24.3" },
     { name = "pydicom", specifier = ">=3.0.2" },
